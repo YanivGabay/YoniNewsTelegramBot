@@ -16,12 +16,12 @@ processed_articles = {}
 
 def cleanup_memory():
     """Remove articles older than 3 hours to keep memory manageable"""
+    global processed_articles
     cutoff_time = time.time() - (3 * 60 * 60)  # 3 hours ago
     
     old_count = len(processed_articles)
     
     # Keep only articles processed within the last 3 hours
-    global processed_articles
     processed_articles = {
         article_id: timestamp 
         for article_id, timestamp in processed_articles.items()
