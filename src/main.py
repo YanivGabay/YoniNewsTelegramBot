@@ -3,7 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.news_fetcher import fetch_news
 from src.telegram_fetcher import fetch_telegram_messages
 from src.llm_handler import get_translations, get_language_name, get_language_emoji, ai_filter_content, ai_clean_telegram_content, ai_batch_filter_content, get_translations_all_three
-from src.bot import send_message, start_alert_listener
+from src.bot import send_message, send_message_to_language_group, start_alert_listener
 from src.config import RSS_FEEDS, SOURCE_TELEGRAM_CHANNELS
 import random
 import html
@@ -133,7 +133,7 @@ async def fetch_process_and_send_news():
 
     # 6. Select top articles by rating
     MIN_RATING = 6
-    MAX_ARTICLES = 5
+    MAX_ARTICLES = 2  # Maximum 2 articles per hour (2 messages per language group)
     
     # Filter by minimum rating and sort by rating (highest first)
     good_articles = [(article, rating) for article, rating in rated_articles if rating >= MIN_RATING]
@@ -212,13 +212,13 @@ async def fetch_process_and_send_news():
                     # Fallback for simple string content
                     message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(str(translated_content), version=2)}\n\n\\-\\-\\-"
                 
-                # Send to Telegram
-                print(f"  📤 Sending {lang_name} to Telegram...")
-                success = await send_message(message_text, parse_mode='MarkdownV2')
+                # Send to the appropriate language group
+                print(f"  📤 Sending {lang_name} to {lang_code.upper()} group...")
+                success = await send_message_to_language_group(message_text, lang_code, parse_mode='MarkdownV2')
                 if success:
-                    print(f"  ✅ {lang_name} sent!")
+                    print(f"  ✅ {lang_name} sent to {lang_code.upper()} group!")
                 else:
-                    print(f"  ❌ {lang_name} failed to send!")
+                    print(f"  ❌ {lang_name} failed to send to {lang_code.upper()} group!")
                 
                 # Small delay between language sends
                 await asyncio.sleep(2)
