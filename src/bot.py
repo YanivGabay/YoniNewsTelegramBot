@@ -314,22 +314,31 @@ async def start_alert_listener():
         print("✅ Telethon client authorized successfully")
         
         # Set up event handler for the alert channel
-        @telethon_client.on(events.NewMessage(chats=SOURCE_ALERT_CHANNEL))
-        async def alert_handler(event):
-            await handle_emergency_alert(event)
+        try:
+            @telethon_client.on(events.NewMessage(chats=SOURCE_ALERT_CHANNEL))
+            async def alert_handler(event):
+                await handle_emergency_alert(event)
+            
+            print(f"🚨 Real-time alert listener started for @{SOURCE_ALERT_CHANNEL}")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not set up alert listener for @{SOURCE_ALERT_CHANNEL}: {e}")
+            print("💡 The bot will continue running but won't receive real-time alerts from this channel")
         
         # Set up event handler for the news channel (if configured)
         if SOURCE_NEWS_CHANNEL:
-            @telethon_client.on(events.NewMessage(chats=SOURCE_NEWS_CHANNEL))
-            async def news_handler(event):
-                # Default to Spanish since that's your current channel
-                await handle_news_channel_message(event, source_lang_code='es')
-            
-            print(f"📰 Real-time news listener started for @{SOURCE_NEWS_CHANNEL} (Spanish)")
+            try:
+                @telethon_client.on(events.NewMessage(chats=SOURCE_NEWS_CHANNEL))
+                async def news_handler(event):
+                    # Default to Spanish since that's your current channel
+                    await handle_news_channel_message(event, source_lang_code='es')
+                
+                print(f"📰 Real-time news listener started for @{SOURCE_NEWS_CHANNEL} (Spanish)")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not set up news listener for @{SOURCE_NEWS_CHANNEL}: {e}")
+                print("💡 The bot will continue running but won't receive real-time news from this channel")
         else:
             print("⚠️  No news channel configured. Add SOURCE_NEWS_CHANNEL to .env to enable")
         
-        print(f"🚨 Real-time alert listener started for @{SOURCE_ALERT_CHANNEL}")
         print("🔴 Listening for emergency alerts and news updates...")
         
         # Keep the client running
