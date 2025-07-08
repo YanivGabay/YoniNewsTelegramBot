@@ -3,26 +3,22 @@ Error handling utilities for OpenAI/OpenRouter API calls
 """
 
 from openai import (
-    RateLimitError, 
-    AuthenticationError, 
-    PermissionDeniedError, 
-    BadRequestError, 
-    APIConnectionError, 
-    APITimeoutError, 
-    InternalServerError, 
-    APIError
+    RateLimitError,
+    AuthenticationError,
+    PermissionDeniedError,
+    BadRequestError,
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    APIError,
 )
+from functools import wraps
 
 def handle_openai_error(func):
     """
     Decorator to handle OpenAI API errors with detailed messages and suggestions.
-    
-    Usage:
-        @handle_openai_error
-        def my_api_function():
-            # Your OpenAI API call here
-            return result
     """
+    @wraps(func)
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -62,5 +58,20 @@ def handle_openai_error(func):
             print(f"🔥 Unexpected error: {type(e).__name__}: {e}")
             print("💡 This is likely a code issue, not an API issue")
             return None
-    
+    return wrapper
+
+def handle_feed_error(func):
+    """
+    A decorator to catch and handle exceptions during RSS feed fetching/parsing.
+    Logs the error and returns an empty list, so one bad feed doesn't stop others.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        feed_url = args[0] if args else "Unknown URL"
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f"❌ Unhandled exception for feed {feed_url}: {e}")
+            # Return an empty list to ensure the main loop can continue
+            return []
     return wrapper 
