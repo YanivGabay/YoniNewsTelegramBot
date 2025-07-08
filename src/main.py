@@ -4,43 +4,14 @@ from src.news_fetcher import fetch_news
 from src.llm_handler import get_translations, get_language_name, get_language_emoji, ai_batch_filter_content, get_translations_all_three
 from src.bot import send_message, send_message_to_language_group, start_alert_listener, start_webhook_server
 from src.config import RSS_FEEDS
+from src.memory import cleanup_memory, mark_as_processed, is_already_processed, get_identifier_from_article
 import random
 import html
 import re
 import telegram.helpers
 import time
 
-# Time-based memory management (article_id -> timestamp)
-processed_articles = {}
-
-def cleanup_memory():
-    """Remove articles older than 3 hours to keep memory manageable"""
-    global processed_articles
-    cutoff_time = time.time() - (3 * 60 * 60)  # 3 hours ago
-    
-    old_count = len(processed_articles)
-    
-    # Keep only articles processed within the last 3 hours
-    processed_articles = {
-        article_id: timestamp 
-        for article_id, timestamp in processed_articles.items()
-        if timestamp > cutoff_time
-    }
-    
-    cleaned_count = old_count - len(processed_articles)
-    if cleaned_count > 0:
-        print(f"🧹 Cleaned {cleaned_count} old articles from memory (keeping {len(processed_articles)} recent)")
-    else:
-        print(f"🧹 Memory check: {len(processed_articles)} articles in 3-hour window")
-
-def mark_as_processed(article_id):
-    """Mark article as processed with current timestamp"""
-    if article_id:
-        processed_articles[article_id] = time.time()
-
-def is_already_processed(article_id):
-    """Check if we've seen this article in the last 3 hours"""
-    return article_id in processed_articles if article_id else False
+# Time-based memory management is now in src/memory.py
 
 async def fetch_process_and_send_news():
     print("🔄 Starting news processing cycle...")
@@ -67,10 +38,10 @@ async def fetch_process_and_send_news():
         print("❌ No content found")
         return
 
-    # 3. Filter out already processed articles using new time-based system
+    # 3. Filter out already processed articles using the shared memory system
     new_articles = [
         article for article in all_articles
-        if not is_already_processed(article.get('id') or article.get('link'))
+        if not is_already_processed(get_identifier_from_article(article))
     ]
 
     if not new_articles:
@@ -125,7 +96,7 @@ async def fetch_process_and_send_news():
     
     for i, (article_to_process, importance_rating) in enumerate(selected_articles, 1):
         print(f"\n{'='*50}")
-        print(f"📖 ARTICLE {i}/{len(selected_articles)} (Rating: {importance_rating}/10)")
+        print(f"📖 [RSS] ARTICLE {i}/{len(selected_articles)} (Rating: {importance_rating}/10)")
         print(f"{'='*50}")
         
         source_lang_code = article_to_process['source_lang']
@@ -137,10 +108,10 @@ async def fetch_process_and_send_news():
         # Clean RSS summary (remove HTML tags)
         clean_summary = re.sub('<[^<]+?>', '', summary_to_clean).strip()
 
-        print(f"📍 {source_name} ({get_language_name(source_lang_code)})")
+        print(f"📍 [RSS] {source_name} ({get_language_name(source_lang_code)})")
         if title:
-            print(f"📄 {title}")
-        print(f"📝 {clean_summary[:100]}...")
+            print(f"📄 [RSS] {title}")
+        print(f"📝 [RSS] {clean_summary[:100]}...")
 
         # Translate to ALL languages (including cleaning the source)
         text_for_llm = f"{title}\n{clean_summary}" if title else clean_summary
@@ -183,18 +154,18 @@ async def fetch_process_and_send_news():
                     message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(str(translated_content), version=2)}\n\n\\-\\-\\-"
                 
                 # Send to the appropriate language group
-                print(f"  📤 Sending {lang_name} to {lang_code.upper()} group...")
+                print(f"  📤 [RSS] Sending {lang_name} to {lang_code.upper()} group...")
                 success = await send_message_to_language_group(message_text, lang_code, parse_mode='MarkdownV2')
                 if success:
-                    print(f"  ✅ {lang_name} sent to {lang_code.upper()} group!")
+                    print(f"  ✅ [RSS] Sent to {lang_code.upper()} group!")
                 else:
-                    print(f"  ❌ {lang_name} failed to send to {lang_code.upper()} group!")
+                    print(f"  ❌ [RSS] Failed to send to {lang_code.upper()} group!")
                 
                 # Small delay between language sends
                 await asyncio.sleep(2)
 
-        # Mark as processed
-        article_identifier = article_to_process.get('id') or article_to_process.get('link')
+        # Mark as processed using the shared memory system
+        article_identifier = get_identifier_from_article(article_to_process)
         mark_as_processed(article_identifier)
         
         # Delay between articles
@@ -202,7 +173,7 @@ async def fetch_process_and_send_news():
             print(f"⏳ Waiting 5 seconds...")
             await asyncio.sleep(5)
 
-    print(f"\n✅ Processing complete! Handled {len(selected_articles)} articles")
+    print(f"\n✅ [RSS] Processing complete! Handled {len(selected_articles)} articles")
 
 
 async def main():

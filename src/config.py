@@ -38,7 +38,12 @@ if TELEGRAM_CHAT_ID_SPANISH:
     LANGUAGE_CHAT_IDS['es'] = TELEGRAM_CHAT_ID_SPANISH
 
 # RSS Feeds
-RSS_FEEDS_STR = get_config_value("RSS_FEEDS") or ""
+#RSS_FEEDS_STR = get_config_value("RSS_FEEDS") or ""
+# The new feed list will be:
+# - Ynet (Hebrew)
+# - Fox News Politics (English)
+# - New York Times Politics (English)
+RSS_FEEDS_STR = "http://www.ynet.co.il/Integration/StoryRss2.xml:he,https://moxie.foxnews.com/google-publisher/politics.xml:en,http://rss.nytimes.com/services/xml/rss/nyt/Politics.xml:en"
 RSS_FEEDS = []
 if RSS_FEEDS_STR:
     try:
@@ -54,10 +59,27 @@ TELEGRAM_API_ID = get_config_value("TELEGRAM_API_ID")
 TELEGRAM_API_HASH = get_config_value("TELEGRAM_API_HASH")
 TELEGRAM_SESSION_DATA = get_config_value("TELEGRAM_SESSION_DATA")
 
+def get_channel_entity(key: str, default: str = "") -> str | int:
+    """
+    Gets a channel entity from config.
+    If it's a numeric string, it's converted to an integer.
+    Otherwise, it's returned as a string (for usernames).
+    """
+    value = get_config_value(key)
+    if not value:
+        return default
+    
+    try:
+        # Try to convert to integer (for channel IDs like -100...)
+        return int(value)
+    except (ValueError, TypeError):
+        # Return as string (for usernames like @channel_name)
+        return value
+
 # Alert Channel Configuration
-SOURCE_ALERT_CHANNEL = get_config_value("SOURCE_ALERT_CHANNEL") or "PikudHaOref_all"
+SOURCE_ALERT_CHANNEL = get_channel_entity("SOURCE_ALERT_CHANNEL", "PikudHaOref_all")
 
 # News Channel Configuration (for real-time summarization)
-SOURCE_NEWS_CHANNEL = get_config_value("SOURCE_NEWS_CHANNEL") or ""
+SOURCE_NEWS_CHANNEL = get_channel_entity("SOURCE_NEWS_CHANNEL")
 
  

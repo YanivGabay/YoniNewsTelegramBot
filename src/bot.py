@@ -34,6 +34,13 @@ def setup_telethon_client():
         
         # Create Telethon client
         telethon_client = TelegramClient('alert_session', TELEGRAM_API_ID, TELEGRAM_API_HASH)
+        
+        # Clear entity cache to ensure fresh channel lookups
+        # This fixes issues when session was created before joining channels
+        print("🧹 Clearing Telethon entity cache for fresh channel lookups...")
+        if hasattr(telethon_client.session, 'entities'):
+            telethon_client.session.entities.clear()
+        
         return True
         
     except Exception as e:
@@ -143,7 +150,7 @@ async def send_message_to_all_languages(messages_by_language, parse_mode=None):
     
     return results
 
-async def handle_webhook_alert(alert_text, message_id=None):
+async def handle_webhook_alert(alert_text, message_id=None, source="Webhook"):
     """
     Handles emergency alerts received via webhook.
     This is the production-ready version that doesn't require Telethon.
@@ -153,11 +160,11 @@ async def handle_webhook_alert(alert_text, message_id=None):
     
     # Prevent duplicate processing
     if message_id and is_webhook_message_processed(message_id):
-        print(f"⚠️  Alert {message_id} already processed, skipping")
+        print(f"⚠️  [{source}] Alert {message_id} already processed, skipping")
         return {"success": True, "message": "Already processed"}
     
-    print(f"\n🚨 WEBHOOK EMERGENCY ALERT")
-    print(f"📍 Source: Webhook from @{SOURCE_ALERT_CHANNEL}")
+    print(f"\n🚨 [{source}] EMERGENCY ALERT")
+    print(f"📍 Source: {source}")
     print(f"📝 Text: {alert_text[:100]}...")
     
     try:
@@ -198,14 +205,14 @@ async def handle_webhook_alert(alert_text, message_id=None):
         if message_id:
             mark_webhook_message_processed(message_id)
         
-        print("🚨 Emergency alert processing complete")
+        print(f"🚨 [{source}] Emergency alert processing complete")
         return {"success": True, "results": results}
         
     except Exception as e:
-        print(f"❌ Error processing emergency alert: {e}")
+        print(f"❌ Error processing [{source}] emergency alert: {e}")
         return {"success": False, "error": str(e)}
 
-async def handle_webhook_news(news_text, source_lang_code='es', message_id=None):
+async def handle_webhook_news(news_text, source_lang_code='es', message_id=None, source="Webhook"):
     """
     Handles news messages received via webhook.
     This is the production-ready version that doesn't require Telethon.
@@ -215,11 +222,11 @@ async def handle_webhook_news(news_text, source_lang_code='es', message_id=None)
     
     # Prevent duplicate processing
     if message_id and is_webhook_message_processed(message_id):
-        print(f"⚠️  News {message_id} already processed, skipping")
+        print(f"⚠️  [{source}] News {message_id} already processed, skipping")
         return {"success": True, "message": "Already processed"}
     
-    print(f"\n📰 WEBHOOK NEWS MESSAGE")
-    print(f"📍 Source: Webhook from @{SOURCE_NEWS_CHANNEL} ({source_lang_code.upper()})")
+    print(f"\n📰 [{source}] NEWS MESSAGE")
+    print(f"📍 Source: {source} ({source_lang_code.upper()})")
     print(f"📝 Text: {news_text[:100]}...")
     
     try:
@@ -260,11 +267,11 @@ async def handle_webhook_news(news_text, source_lang_code='es', message_id=None)
         if message_id:
             mark_webhook_message_processed(message_id)
         
-        print("📰 News processing complete")
+        print(f"📰 [{source}] News processing complete")
         return {"success": True, "results": results}
         
     except Exception as e:
-        print(f"❌ Error processing news message: {e}")
+        print(f"❌ Error processing [{source}] news message: {e}")
         return {"success": False, "error": str(e)}
 
 async def handle_emergency_alert(event):
@@ -275,8 +282,8 @@ async def handle_emergency_alert(event):
     if not alert_text:
         return
     
-    # Use the webhook handler for processing
-    await handle_webhook_alert(alert_text, message_id=f"telethon_{event.message.id}")
+    source_tag = f"Telethon @{SOURCE_ALERT_CHANNEL}"
+    await handle_webhook_alert(alert_text, message_id=f"telethon_{event.message.id}", source=source_tag)
 
 async def handle_news_channel_message(event, source_lang_code='es'):
     """
@@ -286,8 +293,8 @@ async def handle_news_channel_message(event, source_lang_code='es'):
     if not news_text:
         return
     
-    # Use the webhook handler for processing
-    await handle_webhook_news(news_text, source_lang_code, message_id=f"telethon_{event.message.id}")
+    source_tag = f"Telethon @{SOURCE_NEWS_CHANNEL}"
+    await handle_webhook_news(news_text, source_lang_code, message_id=f"telethon_{event.message.id}", source=source_tag)
 
 async def start_alert_listener():
     """
@@ -372,7 +379,7 @@ async def start_webhook_server():
             if not alert_text:
                 return web.json_response({"error": "No alert text provided"}, status=400)
             
-            result = await handle_webhook_alert(alert_text, message_id)
+            result = await handle_webhook_alert(alert_text, message_id, source="Webhook")
             return web.json_response(result)
             
         except Exception as e:
@@ -393,7 +400,7 @@ async def start_webhook_server():
             if not news_text:
                 return web.json_response({"error": "No news text provided"}, status=400)
             
-            result = await handle_webhook_news(news_text, source_lang, message_id)
+            result = await handle_webhook_news(news_text, source_lang, message_id, source="Webhook")
             return web.json_response(result)
             
         except Exception as e:
