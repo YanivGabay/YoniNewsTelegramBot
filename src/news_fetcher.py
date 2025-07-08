@@ -1,21 +1,47 @@
 import feedparser
+from src.error_handler import handle_feed_error
+import requests
 
+@handle_feed_error
 def fetch_news(feed_url, limit=10):
     """
-    Fetches and parses an RSS feed.
+    Fetches news from a given RSS feed URL using the requests library
+    for better reliability and timeout handling.
+    Returns a list of articles.
     """
+    print(f"   Fetching from {feed_url}...")
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    # Use requests to fetch the content with a timeout
     try:
-        feed = feedparser.parse(feed_url)
-        if feed.bozo:
-            print(f"Error parsing feed {feed_url}: {feed.bozo_exception}")
-            return []
+        response = requests.get(feed_url, headers=headers, timeout=15) # 15-second timeout
+        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
         
-        # Limit the number of articles returned
-        articles = feed.entries[:limit] if limit else feed.entries
-        return articles
-    except Exception as e:
-        print(f"Could not fetch or parse feed from {feed_url}. Error: {e}")
-        return []
+        # Pass the content to feedparser
+        feed = feedparser.parse(response.content)
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error using requests for {feed_url}: {e}")
+        return [] # Return empty list on request failure
+
+    if feed.bozo:
+        # Bozo feeds are malformed, but we can still try to read them.
+        # The error is logged, and we proceed.
+        print(f"Warning: Malformed feed from {feed_url}. Reason: {feed.bozo_exception}")
+
+    articles = []
+    for entry in feed.entries[:limit]:
+        articles.append({
+            'title': entry.get('title', ''),
+            'summary': entry.get('summary', entry.get('description', '')), # Also check 'description'
+            'link': entry.get('link', ''),
+            'id': entry.get('id', entry.get('link')) # Use link as fallback for id
+        })
+        
+    return articles
 
 if __name__ == '__main__':
     # Example usage with a sample RSS feed

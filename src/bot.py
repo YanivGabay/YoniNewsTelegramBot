@@ -1,14 +1,70 @@
 import telegram
-from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS, LANGUAGE_CHAT_IDS, SOURCE_ALERT_CHANNEL, SOURCE_NEWS_CHANNEL, TELEGRAM_API_ID, TELEGRAM_API_HASH
+from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS, LANGUAGE_CHAT_IDS, SOURCE_ALERT_CHANNEL, SOURCE_NEWS_CHANNEL, TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_DATA
 import asyncio
 from telethon import TelegramClient, events
 from src.llm_handler import translate_alert_to_all_languages, get_language_emoji, summarize_and_translate_news
 import telegram.helpers
+import json
+from datetime import datetime
+import base64
+import os
 
-# Create Telethon client for real-time listening
+# Memory for webhook deduplication (message_id -> timestamp)
+processed_webhook_messages = {}
+
+# Create Telethon client with session management
 telethon_client = None
-if TELEGRAM_API_ID and TELEGRAM_API_HASH:
-    telethon_client = TelegramClient('alert_session', TELEGRAM_API_ID, TELEGRAM_API_HASH)
+
+def setup_telethon_client():
+    """Set up Telethon client with session from environment variable"""
+    global telethon_client
+    
+    if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
+        print("⚠️  TELEGRAM_API_ID or TELEGRAM_API_HASH not configured")
+        return False
+    
+    try:
+        # Create session file from environment variable if it exists
+        if TELEGRAM_SESSION_DATA:
+            print("🔑 Restoring Telethon session from environment variable...")
+            session_bytes = base64.b64decode(TELEGRAM_SESSION_DATA)
+            with open('alert_session.session', 'wb') as f:
+                f.write(session_bytes)
+            print("✅ Session file restored successfully")
+        
+        # Create Telethon client
+        telethon_client = TelegramClient('alert_session', TELEGRAM_API_ID, TELEGRAM_API_HASH)
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error setting up Telethon client: {e}")
+        return False
+
+def cleanup_webhook_memory():
+    """Remove old webhook messages from memory to prevent memory leaks"""
+    global processed_webhook_messages
+    import time
+    cutoff_time = time.time() - (24 * 60 * 60)  # 24 hours ago
+    
+    old_count = len(processed_webhook_messages)
+    processed_webhook_messages = {
+        msg_id: timestamp 
+        for msg_id, timestamp in processed_webhook_messages.items()
+        if timestamp > cutoff_time
+    }
+    
+    cleaned_count = old_count - len(processed_webhook_messages)
+    if cleaned_count > 0:
+        print(f"🧹 Cleaned {cleaned_count} old webhook messages from memory")
+
+def is_webhook_message_processed(message_id):
+    """Check if we've already processed this webhook message"""
+    return message_id in processed_webhook_messages
+
+def mark_webhook_message_processed(message_id):
+    """Mark webhook message as processed"""
+    import time
+    processed_webhook_messages[message_id] = time.time()
 
 async def send_message(text, parse_mode=None):
     """
@@ -87,17 +143,21 @@ async def send_message_to_all_languages(messages_by_language, parse_mode=None):
     
     return results
 
-async def handle_emergency_alert(event):
+async def handle_webhook_alert(alert_text, message_id=None):
     """
-    Handles real-time emergency alerts from PikudHaOref_all channel.
-    Immediately translates and sends to all language groups.
+    Handles emergency alerts received via webhook.
+    This is the production-ready version that doesn't require Telethon.
     """
-    alert_text = event.message.text
     if not alert_text:
-        return
+        return {"success": False, "error": "No alert text provided"}
     
-    print(f"\n🚨 EMERGENCY ALERT DETECTED")
-    print(f"📍 Source: @{SOURCE_ALERT_CHANNEL}")
+    # Prevent duplicate processing
+    if message_id and is_webhook_message_processed(message_id):
+        print(f"⚠️  Alert {message_id} already processed, skipping")
+        return {"success": True, "message": "Already processed"}
+    
+    print(f"\n🚨 WEBHOOK EMERGENCY ALERT")
+    print(f"📍 Source: Webhook from @{SOURCE_ALERT_CHANNEL}")
     print(f"📝 Text: {alert_text[:100]}...")
     
     try:
@@ -107,12 +167,14 @@ async def handle_emergency_alert(event):
         
         if not translations:
             print("❌ Alert translation failed")
-            return
+            return {"success": False, "error": "Translation failed"}
         
+        results = {}
         # Send to each language group immediately
         for lang_code, translated_text in translations.items():
             if lang_code not in LANGUAGE_CHAT_IDS:
                 print(f"⚠️  No chat ID configured for {lang_code.upper()}, skipping")
+                results[lang_code] = False
                 continue
             
             emoji = get_language_emoji(lang_code)
@@ -126,31 +188,38 @@ async def handle_emergency_alert(event):
                 parse_mode='MarkdownV2'
             )
             
+            results[lang_code] = success
             if success:
                 print(f"✅ Alert sent to {lang_code.upper()} group")
             else:
                 print(f"❌ Failed to send alert to {lang_code.upper()} group")
         
+        # Mark as processed
+        if message_id:
+            mark_webhook_message_processed(message_id)
+        
         print("🚨 Emergency alert processing complete")
+        return {"success": True, "results": results}
         
     except Exception as e:
         print(f"❌ Error processing emergency alert: {e}")
+        return {"success": False, "error": str(e)}
 
-async def handle_news_channel_message(event, source_lang_code='es'):
+async def handle_webhook_news(news_text, source_lang_code='es', message_id=None):
     """
-    Handles real-time news messages from the configured news channel.
-    Summarizes and translates to all language groups.
-    
-    Args:
-        event: Telethon event object
-        source_lang_code (str): Language code of the source channel ('es', 'he', 'en')
+    Handles news messages received via webhook.
+    This is the production-ready version that doesn't require Telethon.
     """
-    news_text = event.message.text
     if not news_text:
-        return
+        return {"success": False, "error": "No news text provided"}
     
-    print(f"\n📰 NEWS MESSAGE DETECTED")
-    print(f"📍 Source: @{SOURCE_NEWS_CHANNEL} ({source_lang_code.upper()})")
+    # Prevent duplicate processing
+    if message_id and is_webhook_message_processed(message_id):
+        print(f"⚠️  News {message_id} already processed, skipping")
+        return {"success": True, "message": "Already processed"}
+    
+    print(f"\n📰 WEBHOOK NEWS MESSAGE")
+    print(f"📍 Source: Webhook from @{SOURCE_NEWS_CHANNEL} ({source_lang_code.upper()})")
     print(f"📝 Text: {news_text[:100]}...")
     
     try:
@@ -160,12 +229,14 @@ async def handle_news_channel_message(event, source_lang_code='es'):
         
         if not translations:
             print("❌ News processing failed")
-            return
+            return {"success": False, "error": "Processing failed"}
         
+        results = {}
         # Send to each language group
         for lang_code, translated_text in translations.items():
             if lang_code not in LANGUAGE_CHAT_IDS:
                 print(f"⚠️  No chat ID configured for {lang_code.upper()}, skipping")
+                results[lang_code] = False
                 continue
             
             emoji = get_language_emoji(lang_code)
@@ -179,33 +250,68 @@ async def handle_news_channel_message(event, source_lang_code='es'):
                 parse_mode='MarkdownV2'
             )
             
+            results[lang_code] = success
             if success:
                 print(f"✅ News sent to {lang_code.upper()} group")
             else:
                 print(f"❌ Failed to send news to {lang_code.upper()} group")
         
+        # Mark as processed
+        if message_id:
+            mark_webhook_message_processed(message_id)
+        
         print("📰 News processing complete")
+        return {"success": True, "results": results}
         
     except Exception as e:
         print(f"❌ Error processing news message: {e}")
+        return {"success": False, "error": str(e)}
+
+async def handle_emergency_alert(event):
+    """
+    Handles real-time emergency alerts from PikudHaOref_all channel.
+    """
+    alert_text = event.message.text
+    if not alert_text:
+        return
+    
+    # Use the webhook handler for processing
+    await handle_webhook_alert(alert_text, message_id=f"telethon_{event.message.id}")
+
+async def handle_news_channel_message(event, source_lang_code='es'):
+    """
+    Handles real-time news messages from the configured news channel.
+    """
+    news_text = event.message.text
+    if not news_text:
+        return
+    
+    # Use the webhook handler for processing
+    await handle_webhook_news(news_text, source_lang_code, message_id=f"telethon_{event.message.id}")
 
 async def start_alert_listener():
     """
-    Starts the real-time alert listener for emergency notifications.
+    Starts the real-time alert listener for emergency notifications using Telethon.
     """
+    if not setup_telethon_client():
+        print("❌ Failed to set up Telethon client")
+        return
+    
     if not telethon_client:
-        print("⚠️  Telethon client not configured. Real-time alerts disabled.")
-        print("💡 Add TELEGRAM_API_ID and TELEGRAM_API_HASH to enable real-time alerts")
+        print("❌ Telethon client not available")
         return
     
     try:
+        print("🔌 Connecting to Telegram...")
         await telethon_client.connect()
         
         if not await telethon_client.is_user_authorized():
-            print("❌ Telethon client not authorized for real-time alerts")
-            print("💡 Run the bot interactively once to authorize Telethon")
+            print("❌ Telethon client not authorized")
+            print("💡 You need to run the session setup script first")
             await telethon_client.disconnect()
             return
+        
+        print("✅ Telethon client authorized successfully")
         
         # Set up event handler for the alert channel
         @telethon_client.on(events.NewMessage(chats=SOURCE_ALERT_CHANNEL))
@@ -231,8 +337,87 @@ async def start_alert_listener():
         
     except Exception as e:
         print(f"❌ Error starting alert listener: {e}")
-        if telethon_client.is_connected():
+        if telethon_client and telethon_client.is_connected():
             await telethon_client.disconnect()
+
+
+
+async def start_webhook_server():
+    """
+    Starts a simple webhook server for receiving alerts and news.
+    This is the production-ready approach for Digital Ocean App Platform.
+    """
+    from aiohttp import web, ClientSession
+    import os
+    
+    async def webhook_alert_handler(request):
+        """Handle incoming alert webhooks"""
+        try:
+            # Clean old messages from memory
+            cleanup_webhook_memory()
+            
+            data = await request.json()
+            alert_text = data.get('text', '')
+            message_id = data.get('message_id')
+            
+            if not alert_text:
+                return web.json_response({"error": "No alert text provided"}, status=400)
+            
+            result = await handle_webhook_alert(alert_text, message_id)
+            return web.json_response(result)
+            
+        except Exception as e:
+            print(f"❌ Webhook alert error: {e}")
+            return web.json_response({"error": str(e)}, status=500)
+    
+    async def webhook_news_handler(request):
+        """Handle incoming news webhooks"""
+        try:
+            # Clean old messages from memory
+            cleanup_webhook_memory()
+            
+            data = await request.json()
+            news_text = data.get('text', '')
+            source_lang = data.get('source_lang', 'es')
+            message_id = data.get('message_id')
+            
+            if not news_text:
+                return web.json_response({"error": "No news text provided"}, status=400)
+            
+            result = await handle_webhook_news(news_text, source_lang, message_id)
+            return web.json_response(result)
+            
+        except Exception as e:
+            print(f"❌ Webhook news error: {e}")
+            return web.json_response({"error": str(e)}, status=500)
+    
+    async def health_check(request):
+        """Health check endpoint"""
+        return web.json_response({"status": "healthy", "timestamp": datetime.now().isoformat()})
+    
+    # Create web application
+    app = web.Application()
+    app.router.add_post('/webhook/alert', webhook_alert_handler)
+    app.router.add_post('/webhook/news', webhook_news_handler)
+    app.router.add_get('/health', health_check)
+    app.router.add_get('/', health_check)  # Root endpoint
+    
+    # Get port from environment (Digital Ocean App Platform uses PORT)
+    port = int(os.environ.get('PORT', 8080))
+    
+    print(f"🌐 Starting webhook server on port {port}")
+    print(f"📡 Alert webhook: POST /webhook/alert")
+    print(f"📰 News webhook: POST /webhook/news")
+    print(f"❤️  Health check: GET /health")
+    
+    # Start the server
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    
+    print(f"✅ Webhook server started on http://0.0.0.0:{port}")
+    return runner
 
 async def main():
     """Test the bot functionality"""

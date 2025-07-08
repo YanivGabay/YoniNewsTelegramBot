@@ -3,4 +3,6 @@ openai
 feedparser
 apscheduler
 python-dotenv
-telethon 
+aiohttp
+telethon
+requests 

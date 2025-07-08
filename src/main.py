@@ -1,10 +1,9 @@
 import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.news_fetcher import fetch_news
-from src.telegram_fetcher import fetch_telegram_messages
-from src.llm_handler import get_translations, get_language_name, get_language_emoji, ai_filter_content, ai_clean_telegram_content, ai_batch_filter_content, get_translations_all_three
-from src.bot import send_message, send_message_to_language_group, start_alert_listener
-from src.config import RSS_FEEDS, SOURCE_TELEGRAM_CHANNELS
+from src.llm_handler import get_translations, get_language_name, get_language_emoji, ai_batch_filter_content, get_translations_all_three
+from src.bot import send_message, send_message_to_language_group, start_alert_listener, start_webhook_server
+from src.config import RSS_FEEDS
 import random
 import html
 import re
@@ -62,29 +61,6 @@ async def fetch_process_and_send_news():
         all_articles.extend(articles)
         print(f"   📊 {len(articles)} articles from {feed_url.split('/')[2]}")
 
-    # 2. Fetch from Telegram channels with individual filtering (keep existing logic)
-    print("📱 Processing Telegram channels...")
-    telegram_articles = []
-    for channel_username, lang_code in SOURCE_TELEGRAM_CHANNELS:
-        messages = await fetch_telegram_messages(channel_username)
-        print(f"   🔍 {len(messages)} messages from @{channel_username}")
-        
-        for message in messages:
-            # Individual filter for Telegram (existing logic)
-            filter_result = ai_filter_content(message['summary'], lang_code)
-            
-            if filter_result == 'NEWS':
-                cleaned_content = ai_clean_telegram_content(message['summary'], lang_code)
-                message['summary'] = cleaned_content
-                message['source_lang'] = lang_code
-                message['source_type'] = 'telegram'
-                message['source_name'] = f"@{channel_username}"
-                telegram_articles.append(message)
-                print(f"     ✅ Message accepted")
-            else:
-                print(f"     ❌ Message rejected (AD)")
-                
-    all_articles.extend(telegram_articles)
     print(f"📊 Total content: {len(all_articles)} items")
 
     if not all_articles:
@@ -118,18 +94,10 @@ async def fetch_process_and_send_news():
     for lang_code, articles in articles_by_lang.items():
         print(f"  🔍 Processing {len(articles)} {get_language_name(lang_code)} articles...")
         
-        # Only batch filter RSS articles (Telegram already filtered individually)
-        rss_articles = [a for a in articles if a['source_type'] == 'rss']
-        telegram_articles = [a for a in articles if a['source_type'] == 'telegram']
-        
-        if rss_articles:
-            rss_rated = ai_batch_filter_content(rss_articles, lang_code)
-            rated_articles.extend(rss_rated)
-            
-        # Telegram articles get default rating of 6 (already filtered)
-        for tg_article in telegram_articles:
-            rated_articles.append((tg_article, 6))
-            print(f"  ✅ Telegram: AUTO:6")
+        # Batch filter all articles for this language together
+        if articles:
+            rated_results = ai_batch_filter_content(articles, lang_code)
+            rated_articles.extend(rated_results)
 
     # 6. Select top articles by rating
     MIN_RATING = 6
@@ -164,8 +132,10 @@ async def fetch_process_and_send_news():
         source_name = article_to_process['source_name']
         
         title = article_to_process.get('title')
-        summary_with_html = article_to_process.get('summary', '')
-        clean_summary = re.sub('<[^<]+?>', '', summary_with_html).strip()
+        summary_to_clean = article_to_process.get('summary', '')
+
+        # Clean RSS summary (remove HTML tags)
+        clean_summary = re.sub('<[^<]+?>', '', summary_to_clean).strip()
 
         print(f"📍 {source_name} ({get_language_name(source_lang_code)})")
         if title:
@@ -249,12 +219,18 @@ async def main():
     print("\n🔄 Running initial news processing...")
     await fetch_process_and_send_news()
 
-    # Start both the scheduler and alert listener concurrently
+    # Start webhook server, scheduler, and alert listener concurrently
     try:
-        # Create tasks for both systems
+        # Create tasks for all systems
+        webhook_task = asyncio.create_task(start_webhook_server())
         alert_task = asyncio.create_task(start_alert_listener())
         
-        # Main loop to keep the scheduler running
+        print("🚀 All systems started:")
+        print("  📰 Scheduled news processing: Every hour")
+        print("  🌐 Webhook server: Real-time alerts & news")
+        print("  📡 Telethon listener: Real-time channel monitoring")
+        
+        # Main loop to keep all systems running
         while True:
             await asyncio.sleep(1)
             
@@ -262,7 +238,14 @@ async def main():
         print("\n🛑 Shutting down...")
         scheduler.shutdown()
         
-        # Cancel the alert listener task
+        # Cancel all tasks
+        if 'webhook_task' in locals():
+            webhook_task.cancel()
+            try:
+                await webhook_task
+            except asyncio.CancelledError:
+                pass
+        
         if 'alert_task' in locals():
             alert_task.cancel()
             try:

@@ -46,47 +46,7 @@ You MUST respond with ONLY the ratings in this exact format:
 
 **YOUR RESPONSE (ONLY the comma-separated ratings):**"""
 
-def get_filter_prompt(text, source_lang_name):
-    """Returns the prompt for filtering news vs advertisements."""
-    return f"""
-You are a content filter for a news service. Your job is to determine if a message is legitimate news content or an advertisement/commercial/promotional content.
 
-The message is in {source_lang_name}.
-
-**CRITICAL RULES:**
-1. If the message contains news, breaking news, political updates, or factual reporting, respond with: NEWS
-2. If the message contains advertisements, promotions, "follow us", "subscribe", product sales, or commercial content, respond with: AD
-3. Your response must be EXACTLY one word: either "NEWS" or "AD"
-4. Do not include any explanation or additional text.
-
-**MESSAGE TO ANALYZE:**
----
-{text}
----
-"""
-
-def get_cleaning_prompt(text, source_lang_name):
-    """Returns the prompt for cleaning telegram content."""
-    return f"""
-You are a content cleaner for a news service. Your job is to take a news message from a Telegram channel and clean it up by removing all promotional elements, channel mentions, and non-news content.
-
-The message is in {source_lang_name}.
-
-**CRITICAL RULES:**
-1. Remove any channel names, usernames, or "via @channel" mentions
-2. Remove promotional text like "follow us", "subscribe", "join our channel"
-3. Remove any URLs or links
-4. Remove any editorial comments from the channel
-5. Keep ONLY the pure news content - the facts and reporting
-6. Do not change the language or translate anything
-7. Preserve the original news structure and formatting
-8. Your response must contain ONLY the cleaned news content, no explanations
-
-**MESSAGE TO CLEAN:**
----
-{text}
----
-"""
 
 def get_alert_translation_prompt(alert_text, target_language):
     """Returns the prompt for translating emergency alerts immediately."""

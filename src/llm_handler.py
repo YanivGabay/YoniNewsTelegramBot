@@ -1,6 +1,6 @@
 from openai import OpenAI
 from src.config import OPENROUTER_API_KEY, YOUR_SITE_URL, YOUR_SITE_NAME
-from src.prompts import get_filter_prompt, get_cleaning_prompt, get_translation_prompt, get_batch_filter_prompt, get_translation_prompt_all_three, get_alert_translation_prompt, get_news_summarization_prompt
+from src.prompts import get_translation_prompt, get_batch_filter_prompt, get_translation_prompt_all_three, get_alert_translation_prompt, get_news_summarization_prompt
 from src.error_handler import handle_openai_error
 
 client = OpenAI(
@@ -179,36 +179,7 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=150):
     print(f"📊 Batch filter result: {len(results)}/{len(articles)} articles kept")
     return results
 
-def ai_filter_content(text, source_lang_code):
-    """
-    Uses AI to determine if a message is news content or advertisement.
-    Returns 'NEWS' or 'AD'.
-    """
-    source_lang_name = get_language_name(source_lang_code)
-    prompt = get_filter_prompt(text, source_lang_name)
-    
-    response = get_completion(prompt)
-    if response and response.strip().upper() in ['NEWS', 'AD']:
-        return response.strip().upper()
-    else:
-        # If AI response is unclear, default to NEWS to avoid losing content
-        print(f"Warning: AI filter gave unclear response: {response}")
-        return 'NEWS'
 
-def ai_clean_telegram_content(text, source_lang_code):
-    """
-    Uses AI to clean telegram content by removing channel mentions, promotional text,
-    and keeping only the pure news content.
-    """
-    source_lang_name = get_language_name(source_lang_code)
-    prompt = get_cleaning_prompt(text, source_lang_name)
-    
-    response = get_completion(prompt)
-    if response:
-        return response.strip()
-    else:
-        print(f"Warning: AI cleaning failed, returning original text")
-        return text
 
 async def translate_alert_immediately(alert_text, target_language_code):
     """
