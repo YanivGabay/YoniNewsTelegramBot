@@ -12,6 +12,7 @@ client = OpenAI(
 def get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_format=None):
     
     if not OPENROUTER_API_KEY:
+        print("      ERROR: OPENROUTER_API_KEY not set.")
         return "Error: OPENROUTER_API_KEY is not set."
 
     # Build the request parameters
@@ -33,7 +34,14 @@ def get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_form
     if response_format:
         request_params["response_format"] = response_format
         
+    print("      ...preparing to call OpenRouter API...")
     completion = client.chat.completions.create(**request_params)
+    print("      ...API call completed.")
+
+    if not completion or not completion.choices:
+        print("      API response is invalid or empty.")
+        return None
+
     return completion.choices[0].message.content
 
 def get_structured_batch_filter_completion(articles_preview, source_lang_name, num_articles):
@@ -95,7 +103,10 @@ ARTICLES TO RATE ({source_lang_name}):
 Rate each article and respond with the structured JSON format.
 """
     
-    return get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_format=response_format)
+    print(f"    -> Calling get_completion for {num_articles} articles.")
+    response = get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_format=response_format)
+    print(f"    <- Returned from get_completion. Response is None: {response is None}")
+    return response
 
 def get_language_name(code):
     """Helper function to get full language name from code."""
@@ -136,9 +147,11 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=150):
         articles_preview += f"\nArticle {i}: {preview_text}\n"
     
     print(f"🔍 Batch filtering {len(articles)} articles ({preview_length} chars each)")
+    print("  -> Calling get_structured_batch_filter_completion...")
     
     # Use structured outputs for reliable parsing
     response = get_structured_batch_filter_completion(articles_preview, source_lang_name, len(articles))
+    print(f"  <- Returned from get_structured_batch_filter_completion. Response is None: {response is None}")
     
     if not response:
         print("❌ Batch filter failed, defaulting all to NEWS:5")
