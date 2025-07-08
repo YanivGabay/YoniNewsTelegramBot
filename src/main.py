@@ -4,20 +4,48 @@ from src.news_fetcher import fetch_news
 from src.llm_handler import get_translations, get_language_name, get_language_emoji, ai_batch_filter_content, get_translations_all_three
 from src.bot import send_message, send_message_to_language_group, start_alert_listener, start_webhook_server
 from src.config import RSS_FEEDS
-from src.memory import cleanup_memory, mark_as_processed, is_already_processed, get_identifier_from_article
-import random
-import html
 import re
 import telegram.helpers
 import time
+import hashlib
 
-# Time-based memory management is now in src/memory.py
+# RSS-specific memory for deduplication (separate from Telethon)
+processed_rss_articles = {}
+
+def cleanup_rss_memory():
+    """Remove old RSS articles from memory to prevent memory leaks"""
+    global processed_rss_articles
+    cutoff_time = time.time() - (3 * 60 * 60)  # 3 hours ago
+    
+    old_count = len(processed_rss_articles)
+    processed_rss_articles = {
+        article_id: timestamp 
+        for article_id, timestamp in processed_rss_articles.items()
+        if timestamp > cutoff_time
+    }
+    
+    cleaned_count = old_count - len(processed_rss_articles)
+    if cleaned_count > 0:
+        print(f"🧹 [RSS] Cleaned {cleaned_count} old articles from memory")
+
+def get_identifier_from_article(article):
+    """Generate a unique identifier for an RSS article"""
+    # Use title + summary for uniqueness
+    text = f"{article.get('title', '')}{article.get('summary', '')}"
+    return hashlib.md5(text.encode()).hexdigest()
+
+def is_already_processed(article_identifier):
+    """Check if we've already processed this RSS article"""
+    cleanup_rss_memory()  # Clean old entries first
+    return article_identifier in processed_rss_articles
+
+def mark_as_processed(article_identifier):
+    """Mark RSS article as processed"""
+    processed_rss_articles[article_identifier] = time.time()
 
 async def fetch_process_and_send_news():
     print("🔄 Starting news processing cycle...")
     
-    # Clean old articles from memory first
-    cleanup_memory()
     
     all_articles = []
 
@@ -38,14 +66,14 @@ async def fetch_process_and_send_news():
         print("❌ No content found")
         return
 
-    # 3. Filter out already processed articles using the shared memory system
+    # 3. Filter out already processed RSS articles (RSS-specific deduplication)
     new_articles = [
         article for article in all_articles
         if not is_already_processed(get_identifier_from_article(article))
     ]
 
     if not new_articles:
-        print("❌ No new content (all already processed in last 3 hours)")
+        print("❌ [RSS] No new content (all already processed in last 3 hours)")
         return
 
     print(f"🆕 New content: {len(new_articles)} items")
@@ -164,7 +192,7 @@ async def fetch_process_and_send_news():
                 # Small delay between language sends
                 await asyncio.sleep(2)
 
-        # Mark as processed using the shared memory system
+        # Mark as processed using RSS-specific memory
         article_identifier = get_identifier_from_article(article_to_process)
         mark_as_processed(article_identifier)
         
