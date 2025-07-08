@@ -3,6 +3,21 @@ from src.config import OPENROUTER_API_KEY, YOUR_SITE_URL, YOUR_SITE_NAME
 from src.prompts import get_translation_prompt, get_batch_filter_prompt, get_translation_prompt_all_three, get_alert_translation_prompt, get_news_summarization_prompt
 from src.error_handler import handle_openai_error
 
+def clean_response_for_logging(response, max_length=500):
+    """Clean response text to prevent log spam from excessive whitespace"""
+    if not response:
+        return "None"
+    
+    # Replace newlines and carriage returns with escaped versions
+    cleaned = response.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+    
+    # Truncate if too long
+    if len(cleaned) > max_length:
+        half = max_length // 2
+        cleaned = cleaned[:half] + "...[TRUNCATED]..." + cleaned[-half:]
+    
+    return cleaned
+
 client = OpenAI(
   base_url="https://openrouter.ai/api/v1",
   api_key=OPENROUTER_API_KEY,
@@ -42,7 +57,28 @@ def get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_form
         print("      API response is invalid or empty.")
         return None
 
-    return completion.choices[0].message.content
+    response_content = completion.choices[0].message.content
+    
+    # CRITICAL: Clean response immediately to prevent log spam from excessive whitespace
+    if response_content and ('\n\n\n' in response_content or len(response_content.split('\n')) > 100):
+        # Suspicious response with excessive newlines - clean it
+        lines = response_content.split('\n')
+        # Remove excessive empty lines but keep structure
+        cleaned_lines = []
+        consecutive_empty = 0
+        for line in lines:
+            if line.strip() == '':
+                consecutive_empty += 1
+                if consecutive_empty <= 2:  # Allow max 2 consecutive empty lines
+                    cleaned_lines.append(line)
+            else:
+                consecutive_empty = 0
+                cleaned_lines.append(line)
+        
+        response_content = '\n'.join(cleaned_lines)
+        print(f"      🧹 Cleaned response: removed {len(lines) - len(cleaned_lines)} excessive empty lines")
+
+    return response_content
 
 def get_structured_batch_filter_completion(articles_preview, source_lang_name, num_articles):
     """Get structured JSON response for batch filtering using OpenRouter's structured outputs."""
@@ -122,7 +158,7 @@ def get_language_emoji(code):
     if code == 'es': return '🇪🇸'
     return '🏳️'
 
-def ai_batch_filter_content(articles, source_lang_code, preview_length=150):
+def ai_batch_filter_content(articles, source_lang_code, preview_length=80):
     """
     Uses AI to filter and rate multiple articles at once using previews.
     Returns list of tuples: [(article, rating), ...]
@@ -138,15 +174,21 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=150):
         title = article.get('title', '')
         summary = article.get('summary', '')
         
-        # Create preview text
+        # Create much shorter preview text to reduce tokens
         if title:
-            preview_text = f"{title}\n{summary[:preview_length]}..."
+            # Title + small amount of summary
+            short_summary = summary[:preview_length] if summary else ""
+            if short_summary:
+                preview_text = f"{title}\n{short_summary}..."
+            else:
+                preview_text = title
         else:
-            preview_text = summary[:preview_length] + "..."
+            # Just the summary, but shorter
+            preview_text = summary[:preview_length] + "..." if summary else "No content"
             
         articles_preview += f"\nArticle {i}: {preview_text}\n"
     
-    print(f"🔍 Batch filtering {len(articles)} articles ({preview_length} chars each)")
+    print(f"🔍 Batch filtering {len(articles)} articles (≤{preview_length} chars each)")
     print("  -> Calling get_structured_batch_filter_completion...")
     
     # Use structured outputs for reliable parsing
@@ -157,7 +199,11 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=150):
         print("❌ Batch filter failed, defaulting all to NEWS:5")
         return [(article, 5) for article in articles]
     
-    print(f"📋 AI Response: {response}")
+    # Clean response before logging to avoid excessive whitespace
+    response_preview = response.replace('\n', '\\n').replace('\r', '\\r')
+    if len(response_preview) > 500:
+        response_preview = response_preview[:250] + "..." + response_preview[-250:]
+    print(f"📋 AI Response: {response_preview}")
     
     # Parse structured JSON response
     results = []
@@ -185,7 +231,11 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=150):
                 
     except Exception as e:
         print(f"⚠️  Error parsing structured response: {e}")
-        print(f"   Raw response: {response}")
+        # Clean raw response preview to avoid log spam
+        raw_preview = response.replace('\n', '\\n').replace('\r', '\\r')
+        if len(raw_preview) > 200:
+            raw_preview = raw_preview[:100] + "..." + raw_preview[-100:]
+        print(f"   Raw response preview: {raw_preview}")
         # Fallback: treat all as NEWS with medium rating
         results = [(article, 5) for article in articles]
     
