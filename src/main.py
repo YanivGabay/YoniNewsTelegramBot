@@ -1,7 +1,7 @@
 import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.news_fetcher import fetch_news
-from src.llm_handler import get_translations, get_language_name, get_language_emoji, ai_batch_filter_content, get_translations_all_three
+from src.llm_handler import get_language_name, get_language_emoji, ai_batch_filter_content, translate_alert_to_all_languages
 from src.bot import send_message, send_message_to_language_group, start_alert_listener, start_webhook_server
 from src.config import RSS_FEEDS
 import random
@@ -10,43 +10,40 @@ import re
 import telegram.helpers
 import time
 
-# Time-based memory management (article_id -> timestamp)
-processed_articles = {}
+# RSS memory (completely separate from Telethon/Webhook)
+processed_rss_articles = {}  # article_hash -> timestamp
 
-def cleanup_memory():
-    """Remove articles older than 3 hours to keep memory manageable"""
-    global processed_articles
+def cleanup_rss_memory():
     cutoff_time = time.time() - (3 * 60 * 60)  # 3 hours ago
     
-    old_count = len(processed_articles)
-    
-    # Keep only articles processed within the last 3 hours
-    processed_articles = {
+    global processed_rss_articles
+    old_count = len(processed_rss_articles)
+    processed_rss_articles = {
         article_id: timestamp 
-        for article_id, timestamp in processed_articles.items()
+        for article_id, timestamp in processed_rss_articles.items()
         if timestamp > cutoff_time
     }
     
-    cleaned_count = old_count - len(processed_articles)
+    cleaned_count = old_count - len(processed_rss_articles)
     if cleaned_count > 0:
-        print(f"🧹 Cleaned {cleaned_count} old articles from memory (keeping {len(processed_articles)} recent)")
+        print(f"🧹 Cleaned {cleaned_count} old articles from memory (keeping {len(processed_rss_articles)} recent)")
     else:
-        print(f"🧹 Memory check: {len(processed_articles)} articles in 3-hour window")
+        print(f"🧹 Memory check: {len(processed_rss_articles)} articles in 3-hour window")
 
 def mark_as_processed(article_id):
     """Mark article as processed with current timestamp"""
     if article_id:
-        processed_articles[article_id] = time.time()
+        processed_rss_articles[article_id] = time.time()
 
 def is_already_processed(article_id):
     """Check if we've seen this article in the last 3 hours"""
-    return article_id in processed_articles if article_id else False
+    return article_id in processed_rss_articles if article_id else False
 
 async def fetch_process_and_send_news():
     print("🔄 Starting news processing cycle...")
     
     # Clean old articles from memory first
-    cleanup_memory()
+    cleanup_rss_memory()
     
     all_articles = []
 
@@ -99,9 +96,9 @@ async def fetch_process_and_send_news():
             rated_results = ai_batch_filter_content(articles, lang_code)
             rated_articles.extend(rated_results)
 
-    # 6. Select top articles by rating
-    MIN_RATING = 6
-    MAX_ARTICLES = 2  # Maximum 2 articles per hour (2 messages per language group)
+    # 6. Select top articles by rating (reduced to avoid alert interference)
+    MIN_RATING = 7  # Higher threshold
+    MAX_ARTICLES = 1  # Only 1 article per hour (3 messages total per hour)
     
     # Filter by minimum rating and sort by rating (highest first)
     good_articles = [(article, rating) for article, rating in rated_articles if rating >= MIN_RATING]
@@ -142,12 +139,12 @@ async def fetch_process_and_send_news():
             print(f"📄 {title}")
         print(f"📝 {clean_summary[:100]}...")
 
-        # Translate to ALL languages (including cleaning the source)
+        # Translate to all languages using simple individual calls
         text_for_llm = f"{title}\n{clean_summary}" if title else clean_summary
         print(f"🔄 Translating...")
         
-        # Get all 3 languages including cleaned source
-        all_languages = get_translations_all_three(text_for_llm, source_lang_code)
+        # Use the same reliable translation method as alerts
+        all_languages = await translate_alert_to_all_languages(text_for_llm, source_lang_code)
 
         if not all_languages:
             print("❌ Translation failed")
@@ -160,64 +157,61 @@ async def fetch_process_and_send_news():
                 lang_emoji = get_language_emoji(lang_code)
                 
                 # Show brief preview
-                if isinstance(translated_content, dict):
-                    if translated_content.get('title'):
-                        preview = translated_content['title'][:60] + "..."
-                    else:
-                        preview = translated_content.get('summary', '')[:60] + "..."
-                else:
-                    preview = str(translated_content)[:60] + "..."
-                
+                preview = str(translated_content)[:60] + "..."
                 print(f"  {lang_emoji} {lang_name}: {preview}")
                 
-                # Format message for Telegram
-                if isinstance(translated_content, dict):
-                    if translated_content.get('title'):
-                        # Article with title
-                        message_text = f"{lang_emoji} *{telegram.helpers.escape_markdown(translated_content['title'], version=2)}*\n\n{telegram.helpers.escape_markdown(translated_content['summary'], version=2)}\n\n\\-\\-\\-"
-                    else:
-                        # Article without title (like Telegram messages)
-                        message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(translated_content['summary'], version=2)}\n\n\\-\\-\\-"
-                else:
-                    # Fallback for simple string content
-                    message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(str(translated_content), version=2)}\n\n\\-\\-\\-"
+                # Format message for Telegram (simple text format like alerts)
+                message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(translated_content, version=2)}\n\n\\-\\-\\-"
                 
-                # Send to the appropriate language group
-                print(f"  📤 Sending {lang_name} to {lang_code.upper()} group...")
+                # Send to the appropriate language group (RSS-specific sending)
+                print(f"  📤 [RSS] Sending {lang_name} to {lang_code.upper()} group...")
                 success = await send_message_to_language_group(message_text, lang_code, parse_mode='MarkdownV2')
                 if success:
                     print(f"  ✅ {lang_name} sent to {lang_code.upper()} group!")
-                else:
-                    print(f"  ❌ {lang_name} failed to send to {lang_code.upper()} group!")
                 
-                # Small delay between language sends
-                await asyncio.sleep(2)
+                # Longer delay between RSS messages to avoid interfering with alerts
+                await asyncio.sleep(5)
 
         # Mark as processed
         article_identifier = article_to_process.get('id') or article_to_process.get('link')
         mark_as_processed(article_identifier)
-        
-        # Delay between articles
-        if i < len(selected_articles):
-            print(f"⏳ Waiting 5 seconds...")
-            await asyncio.sleep(5)
 
     print(f"\n✅ Processing complete! Handled {len(selected_articles)} articles")
 
+async def safe_fetch_process_and_send_news():
+    """Wrapper with error handling for scheduler"""
+    try:
+        await fetch_process_and_send_news()
+    except Exception as e:
+        print(f"❌ Error in scheduled news processing: {e}")
+        # Don't re-raise - let scheduler continue
+
+async def safe_cleanup_memory():
+    """Wrapper with error handling for memory cleanup"""
+    try:
+        cleanup_rss_memory()
+        # Import the telethon cleanup (since RSS and Telethon are separate)
+        from src.bot import cleanup_telethon_memory
+        cleanup_telethon_memory()
+        print("🧹 Memory cleanup completed")
+    except Exception as e:
+        print(f"❌ Error in memory cleanup: {e}")
 
 async def main():
-    # Start the scheduled news processor
+    # Start the scheduled news processor with error handling
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(fetch_process_and_send_news, 'interval', hours=1)
+    scheduler.add_job(safe_fetch_process_and_send_news, 'interval', hours=1, id='news_processor')
+    scheduler.add_job(safe_cleanup_memory, 'interval', hours=3, id='memory_cleanup')  # Clean every 3 hours
     scheduler.start()
     print("🚀 YoniNews Bot started!")
     print("📰 Scheduled news processing: Every hour")
+    print("🧹 Memory cleanup: Every 3 hours")
     print("🚨 Real-time alerts: Continuous monitoring")
     print("Press Ctrl+C to exit.")
 
     # Run once at startup
     print("\n🔄 Running initial news processing...")
-    await fetch_process_and_send_news()
+    await safe_fetch_process_and_send_news()
 
     # Start webhook server, scheduler, and alert listener concurrently
     try:

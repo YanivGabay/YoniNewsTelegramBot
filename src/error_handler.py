@@ -15,9 +15,6 @@ from openai import (
 from functools import wraps
 
 def handle_openai_error(func):
-    """
-    Decorator to handle OpenAI API errors with detailed messages and suggestions.
-    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -61,10 +58,6 @@ def handle_openai_error(func):
     return wrapper
 
 def handle_feed_error(func):
-    """
-    A decorator to catch and handle exceptions during RSS feed fetching/parsing.
-    Logs the error and returns an empty list, so one bad feed doesn't stop others.
-    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         feed_url = args[0] if args else "Unknown URL"

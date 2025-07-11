@@ -4,11 +4,6 @@ import requests
 
 @handle_feed_error
 def fetch_news(feed_url, limit=10):
-    """
-    Fetches news from a given RSS feed URL using the requests library
-    for better reliability and timeout handling.
-    Returns a list of articles.
-    """
     print(f"   Fetching from {feed_url}...")
     
     headers = {
