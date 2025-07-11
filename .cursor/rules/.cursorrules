@@ -1,0 +1,31 @@
+# YoniNewsTelegramBot Development Rules
+
+## Core Principles
+1. **No rush decisions** - Always understand the current logic before making changes
+2. **Keep it simple** - Don't over-complicate solutions
+3. **Confirm before changes** - Ask if logic is unclear
+4. **Minimal documentation** - Code should be self-explanatory
+5. **Separate concerns** - Keep utilities in separate files under src/
+
+## Domain Rules
+1. **Alerts from Pikud are ALWAYS Hebrew** - Never assume other languages
+2. **Keep prompts in prompts.py** - Don't inline prompt text
+4. **Test understanding first** - Read and understand existing code before modifying
+
+## Code Organization
+- src/ subdirectory
+- Keep functions focused and simple
+- Avoid complex inheritance or abstractions
+- Use clear, descriptive names
+
+## Before Making Changes
+1. Read the relevant code sections
+2. Understand the current flow
+3. Identify the exact problem
+5. Confirm approach if uncertain
+
+## Anti-Patterns to Avoid
+- Changing multiple files at once without understanding
+- Adding complex features when simple fixes work
+- Over-documenting obvious code
+- Making assumptions about data sources 
