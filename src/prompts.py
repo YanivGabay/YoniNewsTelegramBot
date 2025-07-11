@@ -3,14 +3,16 @@ AI Prompts for YoniNews Telegram Bot
 All prompts are stored here for easy maintenance and modification.
 """
 
-def get_language_name(lang_code):
-    """Convert language code to language name."""
+def _get_language_name(source_lang_code):
+    """Helper function to get language name from code."""
     lang_map = {
         'he': 'Hebrew',
         'en': 'English', 
         'es': 'Spanish'
     }
-    return lang_map.get(lang_code, lang_code)
+    return lang_map.get(source_lang_code, source_lang_code)
+
+
 
 def get_batch_filter_prompt(articles_preview, source_lang_name):
     """Returns the prompt for batch filtering and rating multiple articles."""
@@ -72,7 +74,7 @@ You are an emergency alert translator. Your job is to translate urgent security 
 
 def get_news_summarization_prompt(news_text, source_lang_code):
     """Returns the prompt for summarizing news channel content."""
-    source_lang_name = get_language_name(source_lang_code)
+    source_lang_name = _get_language_name(source_lang_code)
     return f"""
 You are a professional news summarizer for YoniNews. Your job is to take a {source_lang_name} news message and create a clear, concise summary that captures the essential information.
 
@@ -93,71 +95,4 @@ You are a professional news summarizer for YoniNews. Your job is to take a {sour
 
 **SUMMARIZED NEWS:**"""
 
-def get_translation_prompt_all_three(article_text, source_lang_name, translations_to_request):
-    """Returns the prompt for translating to all 3 languages including cleaned source."""
-    return f"""
-You are a master translator and content formatter for "YoniNews", a special news service run by a son for his father. Your task is to clean and translate a news article into all 3 languages: Hebrew, English, and Spanish.
-
-The provided news article is in {source_lang_name}. Your task is to:
-1. Clean the {source_lang_name} content (remove channel mentions, promotional text, keep only pure news)
-2. Translate into the other languages: {', '.join(translations_to_request)}
-
-**CRITICAL RULES:**
-1. **Clean ALL content**: Remove channel names, URLs, promotional text, editorial comments
-2. **Preserve Structure**: If the original has a title and summary, maintain that structure
-3. **ABSOLUTELY NO CHATTER**: Your response must contain ONLY the translated text
-4. **USE THE PROVIDED TAGS**: Essential for the system to understand your output
-
-**OUTPUT FORMAT:**
----YONI-NEWS-HEBREW-START---
-<The complete and perfectly formatted Hebrew content (cleaned if Hebrew was source, translated if not)>
----YONI-NEWS-HEBREW-END---
-
----YONI-NEWS-ENGLISH-START---
-<The complete and perfectly formatted English content (cleaned if English was source, translated if not)>
----YONI-NEWS-ENGLISH-END---
-
----YONI-NEWS-SPANISH-START---
-<The complete and perfectly formatted Spanish content (cleaned if Spanish was source, translated if not)>
----YONI-NEWS-SPANISH-END---
-
-**ARTICLE TO PROCESS:**
----
-{article_text}
----
-"""
-
-def get_translation_prompt(article_text, source_lang_name, translations_to_request):
-    """Returns the prompt for translating news content."""
-    return f"""
-You are a master translator and content formatter for "YoniNews", a special news service run by a son for his father. The tone should be clear, professional, and respectful. Your mission is to take a news item and flawlessly translate it for a family audience.
-
-The provided news article is in {source_lang_name}. Your task is to translate it into: {', '.join(translations_to_request)}.
-
-**CRITICAL RULES OF YOUR JOB:**
-1.  **Translate ONLY into**: {', '.join(translations_to_request)}.
-2.  **Preserve Structure**: If the original text has a title and a summary, the translation must also have a title and a summary.
-3.  **ABSOLUTELY NO CHATTER**: Your response must contain ONLY the translated text. Do not add any introductions, explanations, apologies, or any text that is not part of the translation.
-4.  **CLEAN OUTPUT**: Do not include the name of the source, URLs, or any other metadata.
-5.  **USE THE PROVIDED TAGS**: You must structure your entire response using the precise start/end tags. This is essential for the system to understand your output.
-
-**OUTPUT FORMAT:**
----YONI-NEWS-HEBREW-START---
-<The complete and perfectly formatted Hebrew translation. If there was a title, it should be the first line.>
----YONI-NEWS-HEBREW-END---
-
----YONI-NEWS-ENGLISH-START---
-<The complete and perfectly formatted English translation. If there was a title, it should be the first line.>
----YONI-NEWS-ENGLISH-END---
-
----YONI-NEWS-SPANISH-START---
-<The complete and perfectly formatted Spanish translation. If there was a title, it should be the first line.>
----YONI-NEWS-SPANISH-END---
-
-Only include the blocks for the languages you were asked to translate into.
-
-**ARTICLE TO TRANSLATE:**
----
-{article_text}
----
-""" 
+ 
