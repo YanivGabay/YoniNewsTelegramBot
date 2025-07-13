@@ -12,6 +12,31 @@ import hashlib
 # RSS memory (completely separate from Telethon/Webhook)
 processed_rss_articles = {}  # article_hash -> timestamp
 
+def get_identifier_from_article(article):
+    """
+    Creates a unique and consistent identifier for an article to prevent duplicates.
+    It prioritizes the article's link, then its ID, and falls back to a hash of the title and summary.
+    """
+    if not isinstance(article, dict):
+        return None
+
+    # Prioritize 'link' as the most reliable identifier
+    identifier = article.get('link') or article.get('id')
+    
+    # As a fallback, create a hash from the title and summary
+    if not identifier:
+        title = article.get('title', '')
+        summary = article.get('summary', '')
+        # Use only the first 200 chars of summary to keep it consistent
+        identifier = f"{title}|{summary[:200]}"
+
+    if not identifier.strip():
+        print(f"⚠️ Could not generate a unique identifier for an article. Title: '{article.get('title', 'N/A')[:50]}...'")
+        return None
+        
+    # Always return a hash for a consistent key format
+    return hashlib.sha256(identifier.encode('utf-8')).hexdigest()
+
 def cleanup_rss_memory():
     cutoff_time = time.time() - (3 * 60 * 60)  # 3 hours ago
     
