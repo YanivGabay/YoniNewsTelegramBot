@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from src.config import OPENROUTER_API_KEY, YOUR_SITE_URL, YOUR_SITE_NAME
 from src.prompts import get_batch_filter_prompt, get_alert_translation_prompt, get_news_summarization_prompt
 from src.error_handler import handle_openai_error
@@ -20,51 +20,82 @@ client = OpenAI(
   api_key=OPENROUTER_API_KEY,
 )
 
+# Define model lists: primary and fallback
+# The first model in the list is the primary, the rest are fallbacks
+MODELS = {
+    "default": [
+        "deepseek/deepseek-r1-0528:free",
+        "qwen/qwen3-8b:free",
+        "google/gemma-2-9b-it:free" 
+    ]
+}
+
 @handle_openai_error
-def get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_format=None):
+def get_completion(prompt, model_list_name="default", response_format=None):
     if not OPENROUTER_API_KEY:
         print("      ERROR: OPENROUTER_API_KEY not set.")
         return "Error: OPENROUTER_API_KEY is not set."
 
-    request_params = {
-        "extra_headers": {
-            "HTTP-Referer": YOUR_SITE_URL,
-            "X-Title": YOUR_SITE_NAME,
-        },
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    
-    if response_format:
-        request_params["response_format"] = response_format
-        
-    print("      ...preparing to call OpenRouter API...")
-    completion = client.chat.completions.create(**request_params)
-    print("      ...API call completed.")
+    model_list = MODELS.get(model_list_name, MODELS["default"])
 
-    if not completion or not completion.choices:
-        print("      API response is invalid or empty.")
-        return None
+    for model in model_list:
+        try:
+            request_params = {
+                "extra_headers": {
+                    "HTTP-Referer": YOUR_SITE_URL,
+                    "X-Title": YOUR_SITE_NAME,
+                },
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            
+            if response_format:
+                request_params["response_format"] = response_format
+                
+            print(f"      ...preparing to call OpenRouter API with model: {model}...")
+            completion = client.chat.completions.create(**request_params)
+            print("      ...API call completed.")
 
-    response_content = completion.choices[0].message.content
-    
-    if response_content and ('\n\n\n' in response_content or len(response_content.split('\n')) > 100):
-        lines = response_content.split('\n')
-        cleaned_lines = []
-        consecutive_empty = 0
-        for line in lines:
-            if line.strip() == '':
-                consecutive_empty += 1
-                if consecutive_empty <= 2:
-                    cleaned_lines.append(line)
-            else:
+            if not completion or not completion.choices:
+                print("      API response is invalid or empty.")
+                # Continue to next model if this one fails to respond properly
+                continue
+
+            response_content = completion.choices[0].message.content
+            
+            if response_content and ('\n\n\n' in response_content or len(response_content.split('\n')) > 100):
+                lines = response_content.split('\n')
+                cleaned_lines = []
                 consecutive_empty = 0
-                cleaned_lines.append(line)
-        
-        response_content = '\n'.join(cleaned_lines)
-        print(f"      🧹 Cleaned response: removed {len(lines) - len(cleaned_lines)} excessive empty lines")
+                for line in lines:
+                    if line.strip() == '':
+                        consecutive_empty += 1
+                        if consecutive_empty <= 2:
+                            cleaned_lines.append(line)
+                    else:
+                        consecutive_empty = 0
+                        cleaned_lines.append(line)
+                
+                response_content = '\n'.join(cleaned_lines)
+                print(f"      🧹 Cleaned response: removed {len(lines) - len(cleaned_lines)} excessive empty lines")
 
-    return response_content
+            # If we get a successful response, return it immediately
+            return response_content
+            
+        except RateLimitError:
+            print(f"      RATE LIMIT: Model '{model}' is rate-limited.")
+            # If this is not the last model in the list, we'll try the next one
+            if model != model_list[-1]:
+                print("      -> Trying next fallback model...")
+                continue
+            else:
+                # If it's the last model, re-raise the exception to be caught by the decorator
+                print("      -> All fallback models failed due to rate limits.")
+                raise
+    
+    # If all models fail for reasons other than rate limiting (e.g., invalid response)
+    print("      ❌ All models in the list failed to provide a valid response.")
+    return None
 
 def get_structured_batch_filter_completion(articles_preview, source_lang_name, num_articles):
     properties = {}
@@ -114,7 +145,7 @@ Rate each article and respond with the structured JSON format.
 """
     
     print(f"    -> Calling get_completion for {num_articles} articles.")
-    response = get_completion(prompt, model="deepseek/deepseek-r1-0528:free", response_format=response_format)
+    response = get_completion(prompt, response_format=response_format)
     print(f"    <- Returned from get_completion. Response is None: {response is None}")
     return response
 
@@ -223,8 +254,8 @@ async def translate_alert_immediately(alert_text, target_language_code):
     prompt = get_alert_translation_prompt(alert_text, target_language_name)
     
     try:
-        # Use DeepSeek for consistent model usage
-        response = get_completion(prompt, model="deepseek/deepseek-r1-0528:free")
+        # Use DeepSeek and fallbacks for consistent model usage
+        response = get_completion(prompt)
         if response:
             return response.strip()
         else:
@@ -262,8 +293,8 @@ async def summarize_news_content(news_text, source_lang_code):
     prompt = get_news_summarization_prompt(news_text, source_lang_code)
     
     try:
-        # Use DeepSeek for consistent model usage
-        response = get_completion(prompt, model="deepseek/deepseek-r1-0528:free")
+        # Use DeepSeek and fallbacks for consistent model usage
+        response = get_completion(prompt)
         if response:
             return response.strip()
         else:
