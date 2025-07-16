@@ -25,8 +25,8 @@ client = OpenAI(
 MODELS = {
     "default": [
         "deepseek/deepseek-r1-0528:free",
-        "qwen/qwen3-8b:free",
-        "google/gemma-2-9b-it:free" 
+        "meta-llama/llama-3.1-405b-instruct:free",
+        "google/gemma-3-12b-it:free" 
     ]
 }
 
