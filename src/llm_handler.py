@@ -1,6 +1,6 @@
 from openai import OpenAI, RateLimitError
 from src.config import OPENROUTER_API_KEY, YOUR_SITE_URL, YOUR_SITE_NAME
-from src.prompts import get_batch_filter_prompt, get_alert_translation_prompt, get_news_summarization_prompt
+from src.prompts import get_batch_filter_prompt, get_alert_translation_prompt, get_news_summarization_prompt, get_generic_translation_prompt
 from src.error_handler import handle_openai_error
 
 def clean_response_for_logging(response, max_length=500):
@@ -248,6 +248,43 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=80):
     return results
 
 
+async def translate_text_immediately(text, source_language_code, target_language_code):
+    source_language_name = get_language_name(source_language_code)
+    target_language_name = get_language_name(target_language_code)
+    prompt = get_generic_translation_prompt(text, source_language_name, target_language_name)
+    
+    try:
+        response = get_completion(prompt)
+        if response:
+            return response.strip()
+        else:
+            print(f"⚠️  Generic translation to {target_language_name} failed, returning original")
+            return text
+    except Exception as e:
+        print(f"❌ Error translating text to {target_language_name}: {e}")
+        return text
+
+async def translate_text_to_all_languages(text, source_lang_code):
+    translations = {source_lang_code: text}
+    
+    import asyncio
+    
+    target_langs = {'he', 'en', 'es'} - {source_lang_code}
+    tasks = []
+    
+    for lang in target_langs:
+        task = translate_text_immediately(text, source_lang_code, lang)
+        tasks.append((lang, task))
+        
+    if tasks:
+        results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
+        
+        for i, (lang, _) in enumerate(tasks):
+            result = results[i]
+            translations[lang] = result if not isinstance(result, Exception) else text
+            
+    return translations
+
 
 async def translate_alert_immediately(alert_text, target_language_code):
     target_language_name = get_language_name(target_language_code)
@@ -309,9 +346,9 @@ async def summarize_and_translate_news(news_text, source_lang_code):
     print(f"📝 Summarizing {get_language_name(source_lang_code)} news content...")
     summarized_content = await summarize_news_content(news_text, source_lang_code)
     
-    # Then translate the summary to all languages
+    # Then translate the summary to all languages using the generic translator
     print("🔄 Translating summary to all languages...")
-    translations = await translate_alert_to_all_languages(summarized_content, source_lang_code)
+    translations = await translate_text_to_all_languages(summarized_content, source_lang_code)
     
     return translations
 

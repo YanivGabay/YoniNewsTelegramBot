@@ -72,6 +72,17 @@ You are an emergency alert translator. Your job is to translate urgent security 
 
 **TRANSLATED ALERT:**"""
 
+def get_generic_translation_prompt(text, source_language, target_language):
+    """Returns a generic prompt for translating text."""
+    return f"""
+Translate the following text from {source_language} to {target_language}.
+Provide only the translated text. Do not add any titles, notes, or explanations.
+
+---
+{text}
+---
+"""
+
 def get_news_summarization_prompt(news_text, source_lang_code):
     """Returns the prompt for summarizing news channel content."""
     source_lang_name = _get_language_name(source_lang_code)
