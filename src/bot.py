@@ -142,6 +142,7 @@ async def send_message_to_language_group(text, language_code, parse_mode=None):
         print(f"{'-'*40}")
         print(f"✅ DEV MODE: {language_code.upper()} message displayed in console")
         print(f"{'='*60}\n")
+        
         return True
     
     if not TELEGRAM_BOT_TOKEN:
