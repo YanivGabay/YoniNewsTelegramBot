@@ -88,6 +88,26 @@ def mark_telethon_message_processed(message_id):
         processed_webhook_messages[message_id] = time.time()
 
 async def send_message(text, parse_mode=None):
+    # In dev mode, print to console instead of sending to Telegram
+    from src.config import DEV_MODE  # Import dynamically to get current value
+    if DEV_MODE:
+        print(f"\n{'='*60}")
+        print(f"🔧 DEV MODE - GENERAL MESSAGE (would send to Telegram)")
+        print(f"{'='*60}")
+        print(f"Parse Mode: {parse_mode or 'None'}")
+        print(f"Content:")
+        print(f"{'-'*40}")
+        # Remove markdown formatting for cleaner console output
+        clean_text = text
+        if parse_mode == 'MarkdownV2':
+            clean_text = text.replace('\\-', '-').replace('\\.', '.').replace('\\(', '(').replace('\\)', ')')
+            clean_text = clean_text.replace('**', '').replace('*', '')
+        print(clean_text)
+        print(f"{'-'*40}")
+        print(f"✅ DEV MODE: General message displayed in console")
+        print(f"{'='*60}\n")
+        return True
+
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_IDS:
         print("❌ Error: Telegram Bot Token or Chat IDs are not configured.")
         return False
@@ -103,6 +123,27 @@ async def send_message(text, parse_mode=None):
         return False
 
 async def send_message_to_language_group(text, language_code, parse_mode=None):
+    # In dev mode, print to console instead of sending to Telegram
+    from src.config import DEV_MODE  # Import dynamically to get current value
+    if DEV_MODE:
+        print(f"\n{'='*60}")
+        print(f"🔧 DEV MODE - {language_code.upper()} MESSAGE (would send to Telegram)")
+        print(f"{'='*60}")
+        print(f"Language: {language_code.upper()}")
+        print(f"Parse Mode: {parse_mode or 'None'}")
+        print(f"Content:")
+        print(f"{'-'*40}")
+        # Remove markdown formatting for cleaner console output
+        clean_text = text
+        if parse_mode == 'MarkdownV2':
+            clean_text = text.replace('\\-', '-').replace('\\.', '.').replace('\\(', '(').replace('\\)', ')')
+            clean_text = clean_text.replace('**', '').replace('*', '')
+        print(clean_text)
+        print(f"{'-'*40}")
+        print(f"✅ DEV MODE: {language_code.upper()} message displayed in console")
+        print(f"{'='*60}\n")
+        return True
+    
     if not TELEGRAM_BOT_TOKEN:
         print("❌ Error: Telegram Bot Token is not configured.")
         return False

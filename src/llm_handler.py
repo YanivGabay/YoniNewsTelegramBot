@@ -26,7 +26,7 @@ MODELS = {
     "default": [
         "deepseek/deepseek-r1-0528:free",
         "meta-llama/llama-3.1-405b-instruct:free",
-        "google/gemma-3-12b-it:free" 
+        "google/gemini-2.5-flash-lite-preview-06-17"
     ]
 }
 

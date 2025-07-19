@@ -3,7 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.news_fetcher import fetch_news
 from src.llm_handler import get_language_name, get_language_emoji, ai_batch_filter_content, translate_alert_to_all_languages
 from src.bot import send_message, send_message_to_language_group, start_alert_listener, start_webhook_server
-from src.config import RSS_FEEDS
+from src.config import RSS_FEEDS, set_runtime_config
 import re
 import telegram.helpers
 import time
@@ -165,7 +165,13 @@ async def fetch_process_and_send_news():
 
         # Translate to all languages using simple individual calls
         text_for_llm = f"{title}\n{clean_summary}" if title else clean_summary
-        print(f"🔄 Translating...")
+        
+        from src.config import DEV_MODE  # Import dynamically to get current value
+        if DEV_MODE:
+            print(f"🔧 DEV MODE: Translating content...")
+            print(f"   Source language: {get_language_name(source_lang_code)}")
+        else:
+            print(f"🔄 Translating...")
         
         # Use the same reliable translation method as alerts
         all_languages = await translate_alert_to_all_languages(text_for_llm, source_lang_code)
@@ -221,13 +227,23 @@ async def safe_cleanup_memory():
     except Exception as e:
         print(f"❌ Error in memory cleanup: {e}")
 
-async def main():
+async def main(dev_mode=False, debug_mode=False):
+    # Set runtime configuration
+    set_runtime_config(dev_mode, debug_mode)
+    
     # Start the scheduled news processor with error handling
     scheduler = AsyncIOScheduler()
     scheduler.add_job(safe_fetch_process_and_send_news, 'interval', hours=1, id='news_processor')
     scheduler.add_job(safe_cleanup_memory, 'interval', hours=3, id='memory_cleanup')  # Clean every 3 hours
     scheduler.start()
-    print("🚀 YoniNews Bot started!")
+    
+    mode_info = ""
+    if dev_mode:
+        mode_info += " (DEV MODE)"
+    if debug_mode:
+        mode_info += " (DEBUG MODE)"
+    
+    print(f"🚀 YoniNews Bot started!{mode_info}")
     print("📰 Scheduled news processing: Every hour")
     print("🧹 Memory cleanup: Every 3 hours")
     print("🚨 Real-time alerts: Continuous monitoring")
@@ -239,14 +255,22 @@ async def main():
 
     # Start webhook server, scheduler, and alert listener concurrently
     try:
-        # Create tasks for all systems
-        webhook_task = asyncio.create_task(start_webhook_server())
-        alert_task = asyncio.create_task(start_alert_listener())
+        tasks = []
         
-        print("🚀 All systems started:")
-        print("  📰 Scheduled news processing: Every hour")
-        print("  🌐 Webhook server: Real-time alerts & news")
-        print("  📡 Telethon listener: Real-time channel monitoring")
+        if not dev_mode:
+            # Only start these services in production mode
+            webhook_task = asyncio.create_task(start_webhook_server())
+            alert_task = asyncio.create_task(start_alert_listener())
+            tasks = [webhook_task, alert_task]
+            
+            print("🚀 All systems started:")
+            print("  📰 Scheduled news processing: Every hour")
+            print("  🌐 Webhook server: Real-time alerts & news")
+            print("  📡 Telethon listener: Real-time channel monitoring")
+        else:
+            print("🚀 Development mode systems started:")
+            print("  📰 Scheduled news processing: Every hour (console output only)")
+            print("  🚨 Webhook & Telethon disabled in dev mode")
         
         # Main loop to keep all systems running
         while True:
@@ -256,20 +280,14 @@ async def main():
         print("\n🛑 Shutting down...")
         scheduler.shutdown()
         
-        # Cancel all tasks
-        if 'webhook_task' in locals():
-            webhook_task.cancel()
-            try:
-                await webhook_task
-            except asyncio.CancelledError:
-                pass
-        
-        if 'alert_task' in locals():
-            alert_task.cancel()
-            try:
-                await alert_task
-            except asyncio.CancelledError:
-                pass
+        # Cancel all tasks if they exist
+        if not dev_mode and tasks:
+            for task in tasks:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
         
         print("👋 Bot stopped")
 

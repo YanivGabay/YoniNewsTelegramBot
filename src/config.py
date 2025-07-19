@@ -82,4 +82,14 @@ SOURCE_ALERT_CHANNEL = get_channel_entity("SOURCE_ALERT_CHANNEL", "PikudHaOref_a
 # News Channel Configuration (for real-time summarization)
 SOURCE_NEWS_CHANNEL = get_channel_entity("SOURCE_NEWS_CHANNEL")
 
+# Global runtime configuration (set by main.py command line args)
+DEV_MODE = False  # When True, show translations in console instead of sending to Telegram
+DEBUG_MODE = False  # When True, enable verbose logging
+
+def set_runtime_config(dev_mode=False, debug_mode=False):
+    """Set runtime configuration from command line arguments"""
+    global DEV_MODE, DEBUG_MODE
+    DEV_MODE = dev_mode
+    DEBUG_MODE = debug_mode
+
  
