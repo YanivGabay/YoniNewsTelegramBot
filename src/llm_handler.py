@@ -1,6 +1,13 @@
 from openai import OpenAI, RateLimitError
 from src.config import OPENROUTER_API_KEY, YOUR_SITE_URL, YOUR_SITE_NAME
-from src.prompts import get_batch_filter_prompt, get_alert_translation_prompt, get_news_summarization_prompt, get_generic_translation_prompt
+from src.prompts import (
+    get_batch_filter_prompt,
+    get_alert_translation_prompt,
+    get_news_summarization_prompt,
+    get_generic_translation_prompt,
+    get_structured_news_summary_prompt,
+    get_structured_translation_prompt,
+)
 from src.error_handler import handle_openai_error
 
 def clean_response_for_logging(response, max_length=500):
@@ -251,17 +258,38 @@ def ai_batch_filter_content(articles, source_lang_code, preview_length=80):
 async def translate_text_immediately(text, source_language_code, target_language_code):
     source_language_name = get_language_name(source_language_code)
     target_language_name = get_language_name(target_language_code)
-    prompt = get_generic_translation_prompt(text, source_language_name, target_language_name)
-    
+    prompt = get_structured_translation_prompt(text, source_language_name, target_language_name)
+
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "translation",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "translation": {"type": "string"}
+                },
+                "required": ["translation"],
+                "additionalProperties": False
+            }
+        }
+    }
+
     try:
-        response = get_completion(prompt)
-        if response:
-            return response.strip()
-        else:
-            print(f"⚠️  Generic translation to {target_language_name} failed, returning original")
+        response = get_completion(prompt, response_format=response_format)
+        if not response:
+            print(f"⚠️  Translation to {target_language_name} failed, returning original")
             return text
+        import json
+        data = json.loads(response)
+        translated = (data.get("translation") or "").strip()
+        if not translated:
+            print(f"⚠️  Empty JSON translation, returning original")
+            return text
+        return translated
     except Exception as e:
-        print(f"❌ Error translating text to {target_language_name}: {e}")
+        print(f"❌ Error translating text to {target_language_name} (structured): {e}")
         return text
 
 async def translate_text_to_all_languages(text, source_lang_code):
@@ -327,18 +355,39 @@ async def translate_alert_to_all_languages(alert_text, source_lang='he'):
     return translations
 
 async def summarize_news_content(news_text, source_lang_code):
-    prompt = get_news_summarization_prompt(news_text, source_lang_code)
-    
+    # Prefer structured JSON response to avoid meta sections
+    prompt = get_structured_news_summary_prompt(news_text, source_lang_code)
+
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "news_summary",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string"}
+                },
+                "required": ["summary"],
+                "additionalProperties": False
+            }
+        }
+    }
+
     try:
-        # Use DeepSeek and fallbacks for consistent model usage
-        response = get_completion(prompt)
-        if response:
-            return response.strip()
-        else:
+        response = get_completion(prompt, response_format=response_format)
+        if not response:
             print("⚠️  News summarization failed, returning original")
             return news_text
+        import json
+        data = json.loads(response)
+        summary = (data.get("summary") or "").strip()
+        if not summary:
+            print("⚠️  Empty JSON summary, returning original")
+            return news_text
+        return summary
     except Exception as e:
-        print(f"❌ Error summarizing news: {e}")
+        print(f"❌ Error summarizing news (structured): {e}")
         return news_text
 
 async def summarize_and_translate_news(news_text, source_lang_code):

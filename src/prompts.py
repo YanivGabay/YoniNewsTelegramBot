@@ -106,4 +106,51 @@ You are a professional news summarizer for YoniNews. Your job is to take a {sour
 
 **SUMMARIZED NEWS:**"""
 
+def get_structured_news_summary_prompt(news_text, source_lang_code):
+    """Strict prompt for a JSON-only summary with a single 'summary' field."""
+    source_lang_name = _get_language_name(source_lang_code)
+    return f"""
+You are a professional news summarizer for YoniNews. Summarize the following {source_lang_name} news message in {source_lang_name}.
+
+RULES (STRICT):
+- Write 2-4 sentences, clear and factual.
+- Preserve important names, locations, dates, and numbers.
+- Do NOT include headings, titles, bullet points, explanations, justifications, compliance/verification notes, reasoning, or commentary of any kind.
+- Do NOT explain what you did. Do NOT describe steps, checks, or criteria. Do NOT include meta-text.
+- Do NOT add emojis, markdown, decorative symbols, or visual separators (e.g., ---).
+- Output ONLY valid JSON with this exact shape: {"summary": "..."}
+- Do NOT include markdown code fences.
+- Do NOT include any text before or after the JSON object. Any extra content will be discarded.
+
+SOURCE:
+<NEWS>
+{news_text}
+</NEWS>
+
+Respond ONLY with the JSON object.
+"""
+
+def get_structured_translation_prompt(text, source_language, target_language):
+    """Strict prompt for a JSON-only translation with a single 'translation' field."""
+    return f"""
+You are a precise translator.
+
+TASK: Translate from {source_language} to {target_language}.
+
+RULES (STRICT):
+- Output ONLY the translation content. No headings, titles, bullet points, explanations, justifications, compliance/verification notes, or commentary.
+- Do NOT explain what you did. Do NOT add examples, notes, or meta-text.
+- Preserve names, numbers, quotes, and URLs exactly; keep tone neutral and concise.
+- Do NOT add emojis, markdown formatting, or visual separators (e.g., ---).
+- Output ONLY valid JSON with this exact shape: {"translation": "..."}
+- Do NOT include markdown code fences.
+- Do NOT include any text before or after the JSON object. Any extra content will be discarded.
+
+SOURCE:
+<TEXT>
+{text}
+</TEXT>
+
+Respond ONLY with the JSON object.
+"""
  
