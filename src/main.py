@@ -1,7 +1,12 @@
 import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from src.news_fetcher import fetch_news
-from src.llm_handler import get_language_name, get_language_emoji, ai_batch_filter_content, translate_alert_to_all_languages
+from src.llm_handler import (
+    get_language_name,
+    get_language_emoji,
+    ai_batch_filter_content,
+    translate_rss_to_all_languages,
+)
 from src.bot import send_message, send_message_to_language_group, start_alert_listener, start_webhook_server
 from src.config import RSS_FEEDS, set_runtime_config
 import re
@@ -163,18 +168,18 @@ async def fetch_process_and_send_news():
             print(f"📄 [RSS] {title}")
         print(f"📝 [RSS] {clean_summary[:100]}...")
 
-        # Translate to all languages using simple individual calls
+        # Prepare text and summarize + translate using the NEWS path (not alert path)
         text_for_llm = f"{title}\n{clean_summary}" if title else clean_summary
         
         from src.config import DEV_MODE  # Import dynamically to get current value
         if DEV_MODE:
-            print(f"🔧 DEV MODE: Translating content...")
+            print(f"🔧 DEV MODE: Summarizing & translating content...")
             print(f"   Source language: {get_language_name(source_lang_code)}")
         else:
-            print(f"🔄 Translating...")
+            print(f"🔄 Summarizing & translating...")
         
-        # Use the same reliable translation method as alerts
-        all_languages = await translate_alert_to_all_languages(text_for_llm, source_lang_code)
+        # Use the explicit RSS NEWS translation API (clear separation from ALERT flow)
+        all_languages = await translate_rss_to_all_languages(text_for_llm, source_lang_code)
 
         if not all_languages:
             print("❌ Translation failed")

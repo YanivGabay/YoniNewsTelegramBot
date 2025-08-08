@@ -352,4 +352,18 @@ async def summarize_and_translate_news(news_text, source_lang_code):
     
     return translations
 
- 
+# --- NEWS/RSS translation APIs (distinct from ALERT translation) ---
+async def translate_news_to_all_languages(news_text: str, source_lang_code: str):
+    """
+    Public API for translating general news content (non-alert).
+    This uses the summarize-then-translate pipeline for concise outputs.
+    Returns a dict mapping language code to translated text, including the source language.
+    """
+    return await summarize_and_translate_news(news_text, source_lang_code)
+
+async def translate_rss_to_all_languages(news_text: str, source_lang_code: str):
+    """
+    Alias specifically for RSS articles to make the call sites explicit.
+    Equivalent to translate_news_to_all_languages.
+    """
+    return await translate_news_to_all_languages(news_text, source_lang_code)
