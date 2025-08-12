@@ -118,7 +118,7 @@ RULES (STRICT):
 - Do NOT include headings, titles, bullet points, explanations, justifications, compliance/verification notes, reasoning, or commentary of any kind.
 - Do NOT explain what you did. Do NOT describe steps, checks, or criteria. Do NOT include meta-text.
 - Do NOT add emojis, markdown, decorative symbols, or visual separators (e.g., ---).
-- Output ONLY valid JSON with this exact shape: {"summary": "..."}
+ - Output ONLY valid JSON with this exact shape: {{"summary": "..."}}
 - Do NOT include markdown code fences.
 - Do NOT include any text before or after the JSON object. Any extra content will be discarded.
 
@@ -142,7 +142,7 @@ RULES (STRICT):
 - Do NOT explain what you did. Do NOT add examples, notes, or meta-text.
 - Preserve names, numbers, quotes, and URLs exactly; keep tone neutral and concise.
 - Do NOT add emojis, markdown formatting, or visual separators (e.g., ---).
-- Output ONLY valid JSON with this exact shape: {"translation": "..."}
+ - Output ONLY valid JSON with this exact shape: {{"translation": "..."}}
 - Do NOT include markdown code fences.
 - Do NOT include any text before or after the JSON object. Any extra content will be discarded.
 
