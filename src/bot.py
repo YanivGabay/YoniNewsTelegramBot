@@ -2,7 +2,8 @@ import telegram
 from src.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS, LANGUAGE_CHAT_IDS, SOURCE_ALERT_CHANNEL, SOURCE_NEWS_CHANNEL, TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_DATA
 import asyncio
 from telethon import TelegramClient, events
-from src.llm_handler import translate_alert_to_all_languages, get_language_emoji, summarize_and_translate_news
+from src.llm_handler import translate_alert_to_all_languages, get_language_emoji
+from src.telethon_llm_handler import summarize_and_translate_news_telethon
 import telegram.helpers
 import json
 from datetime import datetime
@@ -268,7 +269,7 @@ async def handle_webhook_news(news_text, source_lang_code='es', message_id=None,
     try:
         # Summarize and translate to all languages
         print("📝 Processing news content...")
-        translations = await summarize_and_translate_news(news_text, source_lang_code)
+        translations = await summarize_and_translate_news_telethon(news_text, source_lang_code)
         
         if not translations:
             print("❌ News processing failed")
