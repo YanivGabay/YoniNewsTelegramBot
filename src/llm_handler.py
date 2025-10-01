@@ -89,15 +89,17 @@ def get_completion(prompt, model_list_name="default", response_format=None):
             # If we get a successful response, return it immediately
             return response_content
             
-        except RateLimitError:
-            print(f"      RATE LIMIT: Model '{model}' is rate-limited.")
+        except Exception as e:
+            error_msg = str(e)
+            print(f"      API ERROR: Model '{model}' failed - {error_msg}")
+            
             # If this is not the last model in the list, we'll try the next one
             if model != model_list[-1]:
                 print("      -> Trying next fallback model...")
                 continue
             else:
                 # If it's the last model, re-raise the exception to be caught by the decorator
-                print("      -> All fallback models failed due to rate limits.")
+                print("      -> All fallback models failed.")
                 raise
     
     # If all models fail for reasons other than rate limiting (e.g., invalid response)
@@ -279,18 +281,18 @@ async def translate_text_immediately(text, source_language_code, target_language
     try:
         response = get_completion(prompt, response_format=response_format)
         if not response:
-            print(f"⚠️  Translation to {target_language_name} failed, returning original")
-            return text
+            print(f"❌ Translation to {target_language_name} failed - all models unavailable")
+            return None
         import json
         data = json.loads(response)
         translated = (data.get("translation") or "").strip()
         if not translated:
-            print(f"⚠️  Empty JSON translation, returning original")
-            return text
+            print(f"❌ Empty JSON translation to {target_language_name}")
+            return None
         return translated
     except Exception as e:
         print(f"❌ Error translating text to {target_language_name} (structured): {e}")
-        return text
+        return None
 
 async def translate_text_to_all_languages(text, source_lang_code):
     translations = {source_lang_code: text}
@@ -309,7 +311,11 @@ async def translate_text_to_all_languages(text, source_lang_code):
         
         for i, (lang, _) in enumerate(tasks):
             result = results[i]
-            translations[lang] = result if not isinstance(result, Exception) else text
+            # Only add successful translations, skip None results
+            if result and not isinstance(result, Exception):
+                translations[lang] = result
+            else:
+                print(f"❌ Skipping {get_language_name(lang)} - translation failed")
             
     return translations
 
@@ -324,11 +330,11 @@ async def translate_alert_immediately(alert_text, target_language_code):
         if response:
             return response.strip()
         else:
-            print(f"⚠️  Alert translation to {target_language_name} failed, returning original")
-            return alert_text
+            print(f"❌ Alert translation to {target_language_name} failed - all models unavailable")
+            return None
     except Exception as e:
         print(f"❌ Error translating alert to {target_language_name}: {e}")
-        return alert_text
+        return None
 
 async def translate_alert_to_all_languages(alert_text, source_lang='he'):
     translations = {source_lang: alert_text}  # Original in source language
@@ -350,7 +356,11 @@ async def translate_alert_to_all_languages(alert_text, source_lang='he'):
         
         for i, (lang, _) in enumerate(tasks):
             result = results[i]
-            translations[lang] = result if not isinstance(result, Exception) else alert_text
+            # Only add successful translations, skip None results
+            if result and not isinstance(result, Exception):
+                translations[lang] = result
+            else:
+                print(f"❌ Skipping {get_language_name(lang)} alert - translation failed")
     
     return translations
 
@@ -377,23 +387,28 @@ async def summarize_news_content(news_text, source_lang_code):
     try:
         response = get_completion(prompt, response_format=response_format)
         if not response:
-            print("⚠️  News summarization failed, returning original")
-            return news_text
+            print("❌ News summarization failed - all models unavailable")
+            return None
         import json
         data = json.loads(response)
         summary = (data.get("summary") or "").strip()
         if not summary:
-            print("⚠️  Empty JSON summary, returning original")
-            return news_text
+            print("❌ Empty JSON summary")
+            return None
         return summary
     except Exception as e:
         print(f"❌ Error summarizing news (structured): {e}")
-        return news_text
+        return None
 
 async def summarize_and_translate_news(news_text, source_lang_code):
     # First, summarize the content in its original language
     print(f"📝 Summarizing {get_language_name(source_lang_code)} news content...")
     summarized_content = await summarize_news_content(news_text, source_lang_code)
+    
+    # If summarization failed, return empty dict (no messages will be sent)
+    if not summarized_content:
+        print("❌ Cannot proceed with translation - summarization failed")
+        return {}
     
     # Then translate the summary to all languages using the generic translator
     print("🔄 Translating summary to all languages...")

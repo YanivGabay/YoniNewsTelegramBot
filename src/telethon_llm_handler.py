@@ -28,23 +28,23 @@ async def summarize_news_content_telethon(news_text, source_lang_code):
     try:
         response = get_completion(prompt, response_format=response_format)
         if not response:
-            print("⚠️  [Telethon] News summarization failed, returning original")
-            return news_text
+            print("❌ [Telethon] News summarization failed - all models unavailable")
+            return None
 
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if not json_match:
-            print("⚠️  [Telethon] Could not extract JSON from summary response, returning original")
-            return news_text
+            print("❌ [Telethon] Could not extract JSON from summary response")
+            return None
         
         data = json.loads(json_match.group(0))
         summary = (data.get("summary") or "").strip()
         if not summary:
-            print("⚠️  [Telethon] Empty JSON summary, returning original")
-            return news_text
+            print("❌ [Telethon] Empty JSON summary")
+            return None
         return summary
     except Exception as e:
         print(f"❌ [Telethon] Error summarizing news (structured): {e}")
-        return news_text
+        return None
 
 async def translate_text_immediately_telethon(text, source_language_code, target_language_code):
     """A hardened version of translate_text_immediately with JSON extraction for the Telethon flow."""
@@ -64,28 +64,33 @@ async def translate_text_immediately_telethon(text, source_language_code, target
     try:
         response = get_completion(prompt, response_format=response_format)
         if not response:
-            print(f"⚠️  [Telethon] Translation to {target_language_name} failed, returning original")
-            return text
+            print(f"❌ [Telethon] Translation to {target_language_name} failed - all models unavailable")
+            return None
 
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if not json_match:
-            print(f"⚠️  [Telethon] Could not extract JSON from translation response to {target_language_name}, returning original")
-            return text
+            print(f"❌ [Telethon] Could not extract JSON from translation response to {target_language_name}")
+            return None
 
         data = json.loads(json_match.group(0))
         translated = (data.get("translation") or "").strip()
         if not translated:
-            print(f"⚠️  [Telethon] Empty JSON translation, returning original")
-            return text
+            print(f"❌ [Telethon] Empty JSON translation to {target_language_name}")
+            return None
         return translated
     except Exception as e:
         print(f"❌ [Telethon] Error translating text to {target_language_name} (structured): {e}")
-        return text
+        return None
 
 async def summarize_and_translate_news_telethon(news_text, source_lang_code):
     """Orchestrator for the hardened Telethon news processing pipeline."""
     print(f"📝 [Telethon] Summarizing {get_language_name(source_lang_code)} news content (hardened path)...")
     summarized_content = await summarize_news_content_telethon(news_text, source_lang_code)
+    
+    # If summarization failed, return empty dict (no messages will be sent)
+    if not summarized_content:
+        print("❌ [Telethon] Cannot proceed with translation - summarization failed")
+        return {}
     
     # Translate the summary to all languages using the hardened translator
     print("🔄 [Telethon] Translating summary to all languages (hardened path)...")
@@ -101,6 +106,10 @@ async def summarize_and_translate_news_telethon(news_text, source_lang_code):
         results = await asyncio.gather(*[task for _, task in tasks], return_exceptions=True)
         for i, (lang, _) in enumerate(tasks):
             result = results[i]
-            translations[lang] = result if not isinstance(result, Exception) else summarized_content
+            # Only add successful translations, skip None results
+            if result and not isinstance(result, Exception):
+                translations[lang] = result
+            else:
+                print(f"❌ [Telethon] Skipping {get_language_name(lang)} - translation failed")
             
     return translations
