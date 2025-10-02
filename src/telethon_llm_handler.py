@@ -4,7 +4,6 @@ for the Telethon News Flow. It is kept separate to avoid impacting
 the primary RSS and Alert flows.
 """
 import asyncio
-import re
 import json
 
 from src.llm_handler import get_completion, get_language_name
@@ -13,7 +12,7 @@ from src.prompts import get_structured_news_summary_prompt, get_structured_trans
 # --- Hardened processing path for Telethon News Flow ---
 
 async def summarize_news_content_telethon(news_text, source_lang_code):
-    """A hardened version of summarize_news_content with JSON extraction for the Telethon flow."""
+    """A hardened version of summarize_news_content for the Telethon flow."""
     prompt = get_structured_news_summary_prompt(news_text, source_lang_code)
     response_format = {
         "type": "json_schema",
@@ -31,12 +30,7 @@ async def summarize_news_content_telethon(news_text, source_lang_code):
             print("❌ [Telethon] News summarization failed - all models unavailable")
             return None
 
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
-            print("❌ [Telethon] Could not extract JSON from summary response")
-            return None
-        
-        data = json.loads(json_match.group(0))
+        data = json.loads(response)
         summary = (data.get("summary") or "").strip()
         if not summary:
             print("❌ [Telethon] Empty JSON summary")
@@ -47,7 +41,7 @@ async def summarize_news_content_telethon(news_text, source_lang_code):
         return None
 
 async def translate_text_immediately_telethon(text, source_language_code, target_language_code):
-    """A hardened version of translate_text_immediately with JSON extraction for the Telethon flow."""
+    """A hardened version of translate_text_immediately for the Telethon flow."""
     source_language_name = get_language_name(source_language_code)
     target_language_name = get_language_name(target_language_code)
     prompt = get_structured_translation_prompt(text, source_language_name, target_language_name)
@@ -67,12 +61,7 @@ async def translate_text_immediately_telethon(text, source_language_code, target
             print(f"❌ [Telethon] Translation to {target_language_name} failed - all models unavailable")
             return None
 
-        json_match = re.search(r'\{.*\}', response, re.DOTALL)
-        if not json_match:
-            print(f"❌ [Telethon] Could not extract JSON from translation response to {target_language_name}")
-            return None
-
-        data = json.loads(json_match.group(0))
+        data = json.loads(response)
         translated = (data.get("translation") or "").strip()
         if not translated:
             print(f"❌ [Telethon] Empty JSON translation to {target_language_name}")
