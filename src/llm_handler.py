@@ -31,9 +31,8 @@ client = OpenAI(
 # The first model in the list is the primary, the rest are fallbacks
 MODELS = {
     "default": [
-        "deepseek/deepseek-r1-0528:free",
-        "meta-llama/llama-3.1-405b-instruct:free",
-        "google/gemini-2.5-flash-lite-preview-06-17"
+        "x-ai/grok-4.1-fast",
+        "google/gemini-2.5-flash-lite"
     ]
 }
 
