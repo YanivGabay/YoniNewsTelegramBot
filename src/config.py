@@ -77,7 +77,7 @@ def get_channel_entity(key: str, default: str = "") -> str | int:
         return value
 
 # Alert Channel Configuration
-SOURCE_ALERT_CHANNEL = get_channel_entity("SOURCE_ALERT_CHANNEL", "PikudHaOref_all")
+SOURCE_ALERT_CHANNEL = get_channel_entity("SOURCE_ALERT_CHANNEL", "")
 
 # News Channel Configuration (for real-time summarization)
 SOURCE_NEWS_CHANNEL = get_channel_entity("SOURCE_NEWS_CHANNEL")

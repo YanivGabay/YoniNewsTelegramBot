@@ -286,7 +286,7 @@ async def handle_webhook_news(news_text, source_lang_code='es', message_id=None,
             emoji = get_language_emoji(lang_code)
             
             # Format as news update
-            formatted_message = f"📰 {emoji} **NEWS UPDATE**\n\n{telegram.helpers.escape_markdown(translated_text, version=2)}\n\n\\-\\-\\-"
+            formatted_message = f"📰 {emoji} **NEWS UPDATE**\n\n{telegram.helpers.escape_markdown(translated_text, version=2)}\n\n―――"
             
             success = await send_message_to_language_group(
                 formatted_message, 
@@ -358,19 +358,22 @@ async def start_alert_listener():
             
             print("✅ Telethon client authorized successfully")
             
-            # Set up event handler for the alert channel
-            try:
-                @telethon_client.on(events.NewMessage(chats=SOURCE_ALERT_CHANNEL))
-                async def alert_handler(event):
-                    try:
-                        await handle_emergency_alert(event)
-                    except Exception as e:
-                        print(f"❌ Error handling alert: {e}")
-                
-                print(f"🚨 Real-time alert listener started for @{SOURCE_ALERT_CHANNEL}")
-            except Exception as e:
-                print(f"⚠️  Warning: Could not set up alert listener for @{SOURCE_ALERT_CHANNEL}: {e}")
-                print("💡 The bot will continue running but won't receive real-time alerts from this channel")
+            # Set up event handler for the alert channel (if configured)
+            if SOURCE_ALERT_CHANNEL:
+                try:
+                    @telethon_client.on(events.NewMessage(chats=SOURCE_ALERT_CHANNEL))
+                    async def alert_handler(event):
+                        try:
+                            await handle_emergency_alert(event)
+                        except Exception as e:
+                            print(f"❌ Error handling alert: {e}")
+
+                    print(f"🚨 Real-time alert listener started for @{SOURCE_ALERT_CHANNEL}")
+                except Exception as e:
+                    print(f"⚠️  Warning: Could not set up alert listener for @{SOURCE_ALERT_CHANNEL}: {e}")
+                    print("💡 The bot will continue running but won't receive real-time alerts from this channel")
+            else:
+                print("⚠️  No alert channel configured. Add SOURCE_ALERT_CHANNEL to .env to enable")
             
             # Set up event handler for the news channel (if configured)
             if SOURCE_NEWS_CHANNEL:
@@ -408,7 +411,7 @@ async def start_alert_listener():
             try:
                 if telethon_client and telethon_client.is_connected():
                     await telethon_client.disconnect()
-            except:
+            except Exception:
                 pass
             
             # Retry unless it's the last attempt

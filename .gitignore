@@ -43,6 +43,9 @@ ENV/
 *.log
 .DS_Store
 
+# MCP config (contains API tokens)
+.mcp.json
+
 # YoniNewsBot Specific
 *.session
 *.session-journal

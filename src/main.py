@@ -196,7 +196,7 @@ async def fetch_process_and_send_news():
                 print(f"  {lang_emoji} {lang_name}: {preview}")
                 
                 # Format message for Telegram (simple text format like alerts)
-                message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(translated_content, version=2)}\n\n\\-\\-\\-"
+                message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(translated_content, version=2)}\n\n\u2015\u2015\u2015"
                 
                 # Send to the appropriate language group (RSS-specific sending)
                 print(f"  📤 [RSS] Sending {lang_name} to {lang_code.upper()} group...")
@@ -251,7 +251,11 @@ async def main(dev_mode=False, debug_mode=False):
     print(f"🚀 YoniNews Bot started!{mode_info}")
     print("📰 Scheduled news processing: Every hour")
     print("🧹 Memory cleanup: Every 3 hours")
-    print("🚨 Real-time alerts: Continuous monitoring")
+    from src.config import SOURCE_ALERT_CHANNEL
+    if SOURCE_ALERT_CHANNEL:
+        print("🚨 Real-time alerts: Continuous monitoring")
+    else:
+        print("🚨 Real-time alerts: Disabled (no SOURCE_ALERT_CHANNEL configured)")
     print("Press Ctrl+C to exit.")
 
     # Run once at startup

@@ -46,10 +46,10 @@ if __name__ == '__main__':
         print(f"Fetched {len(news_articles)} articles from {sample_feed_url}")
         for article in news_articles[:2]: # Print details of the first 2 articles
             print("\n---")
-            print(f"Title: {article.title}")
-            print(f"Link: {article.link}")
-            if 'summary' in article:
-                print(f"Summary: {article.summary}")
+            print(f"Title: {article['title']}")
+            print(f"Link: {article['link']}")
+            if article.get('summary'):
+                print(f"Summary: {article['summary']}")
             print("---")
     else:
         print("No articles fetched.") 
