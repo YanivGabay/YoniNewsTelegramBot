@@ -77,10 +77,12 @@ def get_channel_entity(key: str, default: str = "") -> str | int:
         return value
 
 # Alert Channel Configuration
-SOURCE_ALERT_CHANNEL = get_channel_entity("SOURCE_ALERT_CHANNEL", "")
+SOURCE_ALERT_CHANNEL = get_channel_entity("SOURCE_ALERT_CHANNEL", "PikudHaOref_all")
 
 # News Channel Configuration (for real-time summarization)
-SOURCE_NEWS_CHANNEL = get_channel_entity("SOURCE_NEWS_CHANNEL")
+# Disabled: moked bitakon channel was forwarding spam/promotional content (buy me coffee links)
+# SOURCE_NEWS_CHANNEL = get_channel_entity("SOURCE_NEWS_CHANNEL")
+SOURCE_NEWS_CHANNEL = ""
 
 # Global runtime configuration (set by main.py command line args)
 DEV_MODE = False  # When True, show translations in console instead of sending to Telegram

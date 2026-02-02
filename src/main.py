@@ -251,11 +251,15 @@ async def main(dev_mode=False, debug_mode=False):
     print(f"🚀 YoniNews Bot started!{mode_info}")
     print("📰 Scheduled news processing: Every hour")
     print("🧹 Memory cleanup: Every 3 hours")
-    from src.config import SOURCE_ALERT_CHANNEL
+    from src.config import SOURCE_ALERT_CHANNEL, SOURCE_NEWS_CHANNEL
     if SOURCE_ALERT_CHANNEL:
         print("🚨 Real-time alerts: Continuous monitoring")
     else:
         print("🚨 Real-time alerts: Disabled (no SOURCE_ALERT_CHANNEL configured)")
+    if SOURCE_NEWS_CHANNEL:
+        print("📰 Real-time news channel: Continuous monitoring")
+    else:
+        print("📰 Real-time news channel: Disabled")
     print("Press Ctrl+C to exit.")
 
     # Run once at startup
