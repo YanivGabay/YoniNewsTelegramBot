@@ -31,8 +31,9 @@ client = OpenAI(
 # The first model in the list is the primary, the rest are fallbacks
 MODELS = {
     "default": [
+        "google/gemini-2.0-flash-001",
+        "openai/gpt-4o-mini",
         "x-ai/grok-4.1-fast",
-        "google/gemini-2.5-flash-lite"
     ]
 }
 
@@ -375,9 +376,10 @@ async def summarize_news_content(news_text, source_lang_code):
             "schema": {
                 "type": "object",
                 "properties": {
-                    "summary": {"type": "string"}
+                    "headline": {"type": "string"},
+                    "body": {"type": "string"}
                 },
-                "required": ["summary"],
+                "required": ["headline", "body"],
                 "additionalProperties": False
             }
         }
@@ -390,11 +392,12 @@ async def summarize_news_content(news_text, source_lang_code):
             return None
         import json
         data = json.loads(response)
-        summary = (data.get("summary") or "").strip()
-        if not summary:
-            print("❌ Empty JSON summary")
+        headline = (data.get("headline") or "").strip()
+        body = (data.get("body") or "").strip()
+        if not body:
+            print("❌ Empty JSON summary body")
             return None
-        return summary
+        return {"headline": headline, "body": body}
     except Exception as e:
         print(f"❌ Error summarizing news (structured): {e}")
         return None
@@ -402,17 +405,45 @@ async def summarize_news_content(news_text, source_lang_code):
 async def summarize_and_translate_news(news_text, source_lang_code):
     # First, summarize the content in its original language
     print(f"📝 Summarizing {get_language_name(source_lang_code)} news content...")
-    summarized_content = await summarize_news_content(news_text, source_lang_code)
-    
+    summary = await summarize_news_content(news_text, source_lang_code)
+
     # If summarization failed, return empty dict (no messages will be sent)
-    if not summarized_content:
+    if not summary:
         print("❌ Cannot proceed with translation - summarization failed")
         return {}
-    
-    # Then translate the summary to all languages using the generic translator
-    print("🔄 Translating summary to all languages...")
-    translations = await translate_text_to_all_languages(summarized_content, source_lang_code)
-    
+
+    headline = summary.get("headline", "")
+    body = summary.get("body", "")
+
+    # Source language gets the original summary
+    translations = {source_lang_code: {"headline": headline, "body": body}}
+
+    # Translate headline and body separately to preserve structure
+    import asyncio
+    target_langs = {'he', 'en', 'es'} - {source_lang_code}
+
+    print("🔄 Translating headline + body to all languages...")
+    for lang in target_langs:
+        # Translate body (required) and headline (optional) in parallel
+        body_task = translate_text_immediately(body, source_lang_code, lang)
+        headline_task = translate_text_immediately(headline, source_lang_code, lang) if headline else None
+
+        tasks_to_run = [body_task]
+        if headline_task:
+            tasks_to_run.append(headline_task)
+
+        results = await asyncio.gather(*tasks_to_run, return_exceptions=True)
+
+        t_body = results[0] if results[0] and not isinstance(results[0], Exception) else None
+        t_headline = ""
+        if headline_task:
+            t_headline = results[1] if len(results) > 1 and results[1] and not isinstance(results[1], Exception) else ""
+
+        if t_body:
+            translations[lang] = {"headline": t_headline, "body": t_body}
+        else:
+            print(f"❌ Skipping {get_language_name(lang)} - translation failed")
+
     return translations
 
 # --- NEWS/RSS translation APIs (distinct from ALERT translation) ---

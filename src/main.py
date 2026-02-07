@@ -13,9 +13,36 @@ import re
 import telegram.helpers
 import time
 import hashlib
+import json
+import os
 
 # RSS memory (completely separate from Telethon/Webhook)
+DEDUP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'processed_articles.json')
+DEDUP_WINDOW_HOURS = 48  # Keep articles in memory for 48 hours
+
 processed_rss_articles = {}  # article_hash -> timestamp
+
+def _load_dedup_state():
+    """Load dedup state from disk on startup."""
+    global processed_rss_articles
+    try:
+        if os.path.exists(DEDUP_FILE):
+            with open(DEDUP_FILE, 'r') as f:
+                processed_rss_articles = json.load(f)
+            # Convert string timestamps back to float
+            processed_rss_articles = {k: float(v) for k, v in processed_rss_articles.items()}
+            print(f"📂 Loaded {len(processed_rss_articles)} processed articles from disk")
+    except Exception as e:
+        print(f"⚠️ Could not load dedup state: {e}")
+        processed_rss_articles = {}
+
+def _save_dedup_state():
+    """Persist dedup state to disk."""
+    try:
+        with open(DEDUP_FILE, 'w') as f:
+            json.dump(processed_rss_articles, f)
+    except Exception as e:
+        print(f"⚠️ Could not save dedup state: {e}")
 
 def get_identifier_from_article(article):
     """
@@ -43,29 +70,31 @@ def get_identifier_from_article(article):
     return hashlib.sha256(identifier.encode('utf-8')).hexdigest()
 
 def cleanup_rss_memory():
-    cutoff_time = time.time() - (3 * 60 * 60)  # 3 hours ago
-    
+    cutoff_time = time.time() - (DEDUP_WINDOW_HOURS * 60 * 60)
+
     global processed_rss_articles
     old_count = len(processed_rss_articles)
     processed_rss_articles = {
-        article_id: timestamp 
+        article_id: timestamp
         for article_id, timestamp in processed_rss_articles.items()
         if timestamp > cutoff_time
     }
-    
+
     cleaned_count = old_count - len(processed_rss_articles)
     if cleaned_count > 0:
         print(f"🧹 Cleaned {cleaned_count} old articles from memory (keeping {len(processed_rss_articles)} recent)")
+        _save_dedup_state()
     else:
-        print(f"🧹 Memory check: {len(processed_rss_articles)} articles in 3-hour window")
+        print(f"🧹 Memory check: {len(processed_rss_articles)} articles in {DEDUP_WINDOW_HOURS}-hour window")
 
 def mark_as_processed(article_id):
-    """Mark article as processed with current timestamp"""
+    """Mark article as processed with current timestamp and persist to disk."""
     if article_id:
         processed_rss_articles[article_id] = time.time()
+        _save_dedup_state()
 
 def is_already_processed(article_id):
-    """Check if we've seen this article in the last 3 hours"""
+    """Check if we've seen this article in the dedup window."""
     return article_id in processed_rss_articles if article_id else False
 
 async def fetch_process_and_send_news():
@@ -100,7 +129,7 @@ async def fetch_process_and_send_news():
     ]
 
     if not new_articles:
-        print("❌ [RSS] No new content (all already processed in last 3 hours)")
+        print(f"❌ [RSS] No new content (all already processed in last {DEDUP_WINDOW_HOURS} hours)")
         return
 
     print(f"🆕 New content: {len(new_articles)} items")
@@ -190,13 +219,25 @@ async def fetch_process_and_send_news():
             for lang_code, translated_content in all_languages.items():
                 lang_name = get_language_name(lang_code)
                 lang_emoji = get_language_emoji(lang_code)
-                
-                # Show brief preview
-                preview = str(translated_content)[:60] + "..."
+
+                # translated_content is {"headline": "...", "body": "..."}
+                if isinstance(translated_content, dict):
+                    headline_raw = translated_content.get("headline", "")
+                    body_raw = translated_content.get("body", "")
+                else:
+                    # Fallback for plain string
+                    headline_raw = ""
+                    body_raw = str(translated_content)
+
+                preview = body_raw[:60] + "..."
                 print(f"  {lang_emoji} {lang_name}: {preview}")
-                
-                # Format message for Telegram (simple text format like alerts)
-                message_text = f"{lang_emoji} {telegram.helpers.escape_markdown(translated_content, version=2)}\n\n\u2015\u2015\u2015"
+
+                body_escaped = telegram.helpers.escape_markdown(body_raw, version=2)
+                if headline_raw:
+                    headline_escaped = telegram.helpers.escape_markdown(headline_raw, version=2)
+                    message_text = f"\U0001F4F0 {lang_emoji} *{headline_escaped}*\n\n{body_escaped}\n\n\u2015\u2015\u2015"
+                else:
+                    message_text = f"\U0001F4F0 {lang_emoji} {body_escaped}\n\n\u2015\u2015\u2015"
                 
                 # Send to the appropriate language group (RSS-specific sending)
                 print(f"  📤 [RSS] Sending {lang_name} to {lang_code.upper()} group...")
@@ -235,7 +276,10 @@ async def safe_cleanup_memory():
 async def main(dev_mode=False, debug_mode=False):
     # Set runtime configuration
     set_runtime_config(dev_mode, debug_mode)
-    
+
+    # Load persisted dedup state
+    _load_dedup_state()
+
     # Start the scheduled news processor with error handling
     scheduler = AsyncIOScheduler()
     scheduler.add_job(safe_fetch_process_and_send_news, 'interval', hours=1, id='news_processor')

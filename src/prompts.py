@@ -107,20 +107,19 @@ You are a professional news summarizer for YoniNews. Your job is to take a {sour
 **SUMMARIZED NEWS:**"""
 
 def get_structured_news_summary_prompt(news_text, source_lang_code):
-    """Strict prompt for a JSON-only summary with a single 'summary' field."""
+    """Strict prompt for a JSON-only summary with headline and body fields."""
     source_lang_name = _get_language_name(source_lang_code)
     return f"""
 You are a professional news summarizer for YoniNews. Summarize the following {source_lang_name} news message in {source_lang_name}.
 
 RULES (STRICT):
-- Write 2-4 sentences, clear and factual.
-- Preserve important names, locations, dates, and numbers.
-- Do NOT include headings, titles, bullet points, explanations, justifications, compliance/verification notes, reasoning, or commentary of any kind.
-- Do NOT explain what you did. Do NOT describe steps, checks, or criteria. Do NOT include meta-text.
-- Do NOT add emojis, markdown, decorative symbols, or visual separators (e.g., ---).
- - Output ONLY valid JSON with this exact shape: {{"summary": "..."}}
-- Do NOT include markdown code fences.
-- Do NOT include any text before or after the JSON object. Any extra content will be discarded.
+- "headline": A short, punchy news headline (max 10 words). Capture the core event.
+- "body": 2-4 sentences, clear and factual. Preserve important names, locations, dates, and numbers.
+- Both headline and body MUST be in {source_lang_name}.
+- Do NOT include bullet points, explanations, justifications, compliance/verification notes, reasoning, or commentary.
+- Do NOT add emojis, markdown, decorative symbols, or visual separators.
+- Output ONLY valid JSON with this exact shape: {{"headline": "...", "body": "..."}}
+- Do NOT include markdown code fences or any text before or after the JSON object.
 
 SOURCE:
 <NEWS>

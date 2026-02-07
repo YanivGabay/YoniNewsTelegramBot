@@ -284,9 +284,21 @@ async def handle_webhook_news(news_text, source_lang_code='es', message_id=None,
                 continue
             
             emoji = get_language_emoji(lang_code)
-            
-            # Format as news update
-            formatted_message = f"📰 {emoji} **NEWS UPDATE**\n\n{telegram.helpers.escape_markdown(translated_text, version=2)}\n\n―――"
+
+            # Format as news update with headline+body
+            if isinstance(translated_text, dict):
+                headline_raw = translated_text.get("headline", "")
+                body_raw = translated_text.get("body", "")
+            else:
+                headline_raw = ""
+                body_raw = str(translated_text)
+
+            body_esc = telegram.helpers.escape_markdown(body_raw, version=2)
+            if headline_raw:
+                headline_esc = telegram.helpers.escape_markdown(headline_raw, version=2)
+                formatted_message = f"\U0001F4F0 {emoji} *{headline_esc}*\n\n{body_esc}\n\n\u2015\u2015\u2015"
+            else:
+                formatted_message = f"\U0001F4F0 {emoji} {body_esc}\n\n\u2015\u2015\u2015"
             
             success = await send_message_to_language_group(
                 formatted_message, 
