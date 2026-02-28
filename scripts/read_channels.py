@@ -10,7 +10,7 @@ import sys
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-API_ID = 2778634
+API_ID = 27728634  # 8 digits - NOT 2778634!
 API_HASH = "9801669edc41e1df08488eae0a8aaff6"
 
 CHANNELS = {

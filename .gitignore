@@ -49,6 +49,7 @@ ENV/
 # YoniNewsBot Specific
 *.session
 *.session-journal
+session_b64.txt
 processed_articles.json
 
 setup_groups_guide.md
