@@ -369,10 +369,20 @@ async def start_alert_listener():
                 return
             
             print("✅ Telethon client authorized successfully")
-            
+
+            # Populate entity cache by loading dialogs - required for event handlers
+            print("📂 Loading dialogs to populate entity cache...")
+            async for _ in telethon_client.iter_dialogs(limit=100):
+                pass
+            print("✅ Entity cache populated")
+
             # Set up event handler for the alert channel (if configured)
             if SOURCE_ALERT_CHANNEL:
                 try:
+                    # Verify we can access the alert channel
+                    alert_entity = await telethon_client.get_entity(SOURCE_ALERT_CHANNEL)
+                    print(f"✅ Found alert channel: {alert_entity.title} (ID: {alert_entity.id})")
+
                     @telethon_client.on(events.NewMessage(chats=SOURCE_ALERT_CHANNEL))
                     async def alert_handler(event):
                         try:
@@ -380,10 +390,10 @@ async def start_alert_listener():
                         except Exception as e:
                             print(f"❌ Error handling alert: {e}")
 
-                    print(f"🚨 Real-time alert listener started for @{SOURCE_ALERT_CHANNEL}")
+                    print(f"🚨 Real-time alert listener started for {alert_entity.title}")
                 except Exception as e:
-                    print(f"⚠️  Warning: Could not set up alert listener for @{SOURCE_ALERT_CHANNEL}: {e}")
-                    print("💡 The bot will continue running but won't receive real-time alerts from this channel")
+                    print(f"⚠️  Warning: Could not set up alert listener for {SOURCE_ALERT_CHANNEL}: {e}")
+                    print("💡 Make sure the Telegram account is a member of the alert channel")
             else:
                 print("⚠️  No alert channel configured. Add SOURCE_ALERT_CHANNEL to .env to enable")
             
